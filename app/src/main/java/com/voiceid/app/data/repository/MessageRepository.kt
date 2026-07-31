@@ -32,12 +32,13 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
      * API_REFERENCE.md §4 / BACKEND_README.md §6.1 — channel name is a cross-client
      * compatibility surface, must not be altered.
      */
-    fun realtimeMessages(conversationId: String): Flow<PostgresAction> {
+    suspend fun realtimeMessages(conversationId: String): Flow<PostgresAction> {
         val channel = client.realtime.channel("messages:$conversationId")
         val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
             filter("conversation_id", FilterOperator.EQ, conversationId)
         }
+        channel.subscribe(blockUntilSubscribed = true)
         return flow
     }
 
