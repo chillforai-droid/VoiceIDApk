@@ -5,6 +5,7 @@ import com.voiceid.app.data.remote.MediaApi
 import com.voiceid.app.data.remote.SupabaseModule
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -35,7 +36,7 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
         val channel = client.realtime.channel("messages:$conversationId")
         val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
-            filter = "conversation_id=eq.$conversationId"
+            filter("conversation_id", FilterOperator.EQ, conversationId)
         }
         return flow
     }

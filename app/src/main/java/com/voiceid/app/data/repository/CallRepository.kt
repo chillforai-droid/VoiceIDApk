@@ -4,6 +4,7 @@ import com.voiceid.app.data.model.Call
 import com.voiceid.app.data.remote.SupabaseModule
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -57,7 +58,7 @@ class CallRepository {
         val channel = client.realtime.channel("calls:$userId")
         return channel.postgresChangeFlow(schema = "public") {
             table = "calls"
-            filter = "receiver_id=eq.$userId"
+            filter("receiver_id", FilterOperator.EQ, userId)
         }
     }
 
