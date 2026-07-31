@@ -9,7 +9,7 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.flow.Flow
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /** Implements API_REFERENCE.md §3.7 + BACKEND_README.md §6.3 DB-row side of the call state machine. */
 class CallRepository {
@@ -57,7 +57,7 @@ class CallRepository {
         val channel = client.realtime.channel("calls:$userId")
         return channel.postgresChangeFlow(schema = "public") {
             table = "calls"
-            filter("receiver_id", io.github.jan.supabase.postgrest.query.FilterOperator.EQ, userId)
+            filter = "receiver_id=eq.$userId"
         }
     }
 

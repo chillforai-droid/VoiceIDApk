@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.DefaultVideoDecoderFactory
@@ -115,7 +117,7 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
         _callState.value = CallState.CONNECTING
         scope.launch {
             subscribeSignaling(call.id)
-            signalingChannel?.broadcast(event = "receiver-ready", payload = kotlinx.serialization.json.buildJsonObject {})
+            signalingChannel?.broadcast(event = "receiver-ready", message = kotlinx.serialization.json.buildJsonObject {})
             callRepository.markAccepted(call.id)
         }
     }
@@ -171,7 +173,9 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
                 scope.launch {
                     signalingChannel?.broadcast(
                         event = "ice-candidate",
-                        payload = IceCandidatePayload(candidate.sdpMid, candidate.sdpMLineIndex, candidate.sdp)
+                        message = Json.encodeToJsonElement(
+                            IceCandidatePayload(candidate.sdpMid, candidate.sdpMLineIndex, candidate.sdp)
+                        ) as JsonObject
                     )
                 }
             }
@@ -222,12 +226,15 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
         val pc = buildPeerConnection()
         _callState.value = CallState.CONNECTING
         pc.createOffer(object : SdpObserverAdapter() {
-            override fun onCreateSuccess(desc: SessionDescription) {
+            override fun onCreateSuccess(desc: SessionDescription?) {
+                if (desc == null) return
                 pc.setLocalDescription(SdpObserverAdapter(), desc)
                 scope.launch {
                     signalingChannel?.broadcast(
                         event = "offer",
-                        payload = SdpPayload(type = desc.type.canonicalForm(), sdp = desc.description)
+                        message = Json.encodeToJsonElement(
+                            SdpPayload(type = desc.type.canonicalForm(), sdp = desc.description)
+                        ) as JsonObject
                     )
                 }
             }
@@ -243,12 +250,15 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
         }), SessionDescription(SessionDescription.Type.OFFER, offer.sdp))
 
         pc.createAnswer(object : SdpObserverAdapter() {
-            override fun onCreateSuccess(desc: SessionDescription) {
+            override fun onCreateSuccess(desc: SessionDescription?) {
+                if (desc == null) return
                 pc.setLocalDescription(SdpObserverAdapter(), desc)
                 scope.launch {
                     signalingChannel?.broadcast(
                         event = "answer",
-                        payload = SdpPayload(type = desc.type.canonicalForm(), sdp = desc.description)
+                        message = Json.encodeToJsonElement(
+                            SdpPayload(type = desc.type.canonicalForm(), sdp = desc.description)
+                        ) as JsonObject
                     )
                 }
             }

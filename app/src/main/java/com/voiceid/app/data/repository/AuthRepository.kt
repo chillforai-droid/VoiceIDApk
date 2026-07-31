@@ -15,7 +15,7 @@ class AuthException(message: String) : Exception(message)
 
 /**
  * Implements API_REFERENCE.md §2 exactly: Supabase Auth is the entire auth API, there is no
- * custom /api/auth/* layer. Google sign-in uses a native ID-token flow (Credential Manager /
+ * custom /api/auth layer. Google sign-in uses a native ID-token flow (Credential Manager /
  * One Tap) rather than a browser redirect, per AI_HANDOFF.md §6.1, but must land the user in
  * the identical post-auth onboarding gate.
  */

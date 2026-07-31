@@ -45,7 +45,7 @@ class NotificationRepository {
         val channel = client.realtime.channel("realtime:notifications")
         return channel.postgresChangeFlow(schema = "public") {
             table = "notifications"
-            filter("user_id", io.github.jan.supabase.postgrest.query.FilterOperator.EQ, userId)
+            filter = "user_id=eq.$userId"
         }
     }
 

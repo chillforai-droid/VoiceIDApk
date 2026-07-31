@@ -35,7 +35,7 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
         val channel = client.realtime.channel("messages:$conversationId")
         val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
-            filter("conversation_id", io.github.jan.supabase.postgrest.query.FilterOperator.EQ, conversationId)
+            filter = "conversation_id=eq.$conversationId"
         }
         return flow
     }

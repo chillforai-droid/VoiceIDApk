@@ -27,7 +27,7 @@ class MediaApiException(val code: Int, val body: ApiErrorBody?) :
     Exception(body?.error ?: "Media API error ($code)")
 
 /**
- * Thin client for the frozen `/api/media/*` contract documented in API_REFERENCE.md §1.
+ * Thin client for the frozen `/api/media` endpoints contract documented in API_REFERENCE.md §1.
  * This talks to the EXISTING VoiceID backend (Express/Vercel handlers) — it does not
  * reimplement any server logic. Base URL points at the deployed backend (BuildConfig.API_BASE_URL).
  */

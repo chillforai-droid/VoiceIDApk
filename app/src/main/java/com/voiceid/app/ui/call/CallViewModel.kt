@@ -9,6 +9,7 @@ import com.voiceid.app.data.model.Call
 import com.voiceid.app.data.remote.SupabaseModule
 import com.voiceid.app.di.AppContainer
 import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.decodeRecord
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
