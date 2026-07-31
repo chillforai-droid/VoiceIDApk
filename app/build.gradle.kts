@@ -129,7 +129,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // Supabase Android/Kotlin Multiplatform SDK
-    implementation(platform("io.github.jan-tennert.supabase:bom:2.6.0"))
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.6.0"))
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:realtime-kt")
