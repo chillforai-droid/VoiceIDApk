@@ -4,7 +4,7 @@ import android.content.Context
 import com.voiceid.app.BuildConfig
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
-import io.github.jan.supabase.auth.SessionStatus
+import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
