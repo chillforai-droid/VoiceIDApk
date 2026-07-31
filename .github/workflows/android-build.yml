@@ -55,6 +55,15 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
+      # TEMPORARY DEBUG STEP - remove after copying the SHA-1 from the logs
+      - name: Print Debug Keystore SHA-1 (TEMPORARY - remove after use)
+        run: |
+          keytool -list -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -storepass android \
+            -keypass android
+
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace
 
