@@ -56,13 +56,33 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       # TEMPORARY DEBUG STEP - remove after copying the SHA-1 from the logs
-      - name: Print Debug Keystore SHA-1 (TEMPORARY - remove after use)
+      - name: Discover debug signing config and print SHA-1 (TEMPORARY - remove after use)
+        continue-on-error: true
         run: |
-          keytool -list -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey \
-            -storepass android \
-            -keypass android
+          set +e
+
+          echo "===== Current working directory ====="
+          pwd
+
+          echo ""
+          echo "===== Searching entire runner for *.jks / *.keystore files ====="
+          KEYSTORES=$(find / -xdev -type f \( -iname "*.jks" -o -iname "*.keystore" \) 2>/dev/null)
+          if [ -n "$KEYSTORES" ]; then
+            echo "Found the following keystore file(s):"
+            echo "$KEYSTORES"
+          else
+            echo "No *.jks or *.keystore files were found anywhere on the runner."
+          fi
+
+          echo ""
+          echo "===== Asking Gradle for the actual resolved signing configuration ====="
+          echo "(this reflects whatever signingConfig Gradle really used to sign the debug/release APKs,"
+          echo " including any auto-generated default debug keystore, without assuming a path)"
+          ./gradlew signingReport --stacktrace
+
+          echo ""
+          echo "The 'signingReport' output above lists, per build variant, the exact"
+          echo "Store path, Alias, and SHA1 fingerprint that Gradle actually used."
 
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace
