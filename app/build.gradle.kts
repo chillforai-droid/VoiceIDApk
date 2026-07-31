@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -21,7 +23,7 @@ android {
         // Values are read from local.properties / -P Gradle properties / CI secrets.
         // Never commit real secrets — these placeholders let the project build in CI
         // even before real credentials are supplied. Replace via local.properties for a real run.
-        val localProperties = java.util.Properties()
+        val localProperties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")
         if (localPropertiesFile.exists()) {
             localProperties.load(localPropertiesFile.inputStream())
@@ -41,7 +43,7 @@ android {
 
     signingConfigs {
         create("release") {
-            val localProperties = java.util.Properties()
+            val localProperties = Properties()
             val localPropertiesFile = rootProject.file("local.properties")
             if (localPropertiesFile.exists()) {
                 localProperties.load(localPropertiesFile.inputStream())
