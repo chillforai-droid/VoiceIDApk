@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.voiceid.app.data.remote.SupabaseModule
+import com.voiceid.app.notifications.NotificationsCenter
 import com.voiceid.app.ui.auth.*
 import com.voiceid.app.ui.call.ActiveCallScreen
 import com.voiceid.app.ui.call.CallViewModel
@@ -153,12 +154,30 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
+                val unreadMessageCount by NotificationsCenter.unreadMessageCount.collectAsState()
+                val unreadCount by NotificationsCenter.unreadCount.collectAsState()
                 NavigationBar {
                     bottomNavItems.forEach { (route, label, icon) ->
+                        // Mirrors Web's MobileBottomNav.tsx: Messages tab shows
+                        // unreadMessageCount, Notifications tab shows unreadCount, both
+                        // sourced from the same always-on NotificationContext-equivalent.
+                        val badgeCount = when (route) {
+                            Routes.HOME -> unreadMessageCount
+                            Routes.NOTIFICATIONS -> unreadCount
+                            else -> 0
+                        }
                         NavigationBarItem(
                             selected = backStackEntry?.destination?.route == route,
                             onClick = { navController.navigate(route) { launchSingleTop = true } },
-                            icon = { Icon(icon, contentDescription = label) },
+                            icon = {
+                                if (badgeCount > 0) {
+                                    BadgedBox(badge = { Badge { Text(if (badgeCount > 99) "99+" else badgeCount.toString()) } }) {
+                                        Icon(icon, contentDescription = label)
+                                    }
+                                } else {
+                                    Icon(icon, contentDescription = label)
+                                }
+                            },
                             label = { Text(label) }
                         )
                     }
@@ -232,11 +251,9 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
             }
             composable(Routes.NOTIFICATIONS) {
                 val vm: NotificationsViewModel = viewModel()
-                LaunchedEffect(Unit) { vm.load() }
                 val notifications by vm.notifications.collectAsState()
-                val isLoading by vm.isLoading.collectAsState()
                 NotificationsScreen(
-                    notifications = notifications, isLoading = isLoading,
+                    notifications = notifications, isLoading = false,
                     onNotificationClick = { vm.markRead(it) },
                     onMarkAllRead = { vm.markAllRead() }
                 )

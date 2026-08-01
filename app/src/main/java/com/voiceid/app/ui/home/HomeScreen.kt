@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,7 +32,18 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("VoiceID", fontWeight = FontWeight.Bold) }
+                title = { Text("VoiceID", fontWeight = FontWeight.Bold) },
+                actions = {
+                    // Root cause of the reported bug: this action button didn't exist, so
+                    // Search was only reachable via the "Find people" button inside
+                    // EmptyConversationsState below — which disappears the moment the user
+                    // has even one conversation, matching Web's always-visible Search entry
+                    // point (MobileBottomNav.tsx) requires it to stay reachable regardless
+                    // of conversation count.
+                    IconButton(onClick = onSearchClick) {
+                        Icon(Icons.Filled.Search, contentDescription = "Search for people")
+                    }
+                }
             )
         }
     ) { padding ->

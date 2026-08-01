@@ -16,6 +16,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingExcept
 import com.voiceid.app.BuildConfig
 import com.voiceid.app.data.model.Profile
 import com.voiceid.app.di.AppContainer
+import com.voiceid.app.notifications.NotificationsCenter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -280,6 +281,7 @@ class AuthViewModel : ViewModel() {
             try {
                 authRepository.claimUsername(username, displayName)
                 _ownProfile.value = authRepository.fetchOwnProfile()
+                authRepository.currentUserId()?.let { NotificationsCenter.start(it) }
                 _uiState.value = AuthUiState.Ready
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(e.message ?: "Could not claim username")
@@ -316,6 +318,7 @@ class AuthViewModel : ViewModel() {
         _uiState.value = if (profile == null || profile.username.isNullOrBlank()) {
             AuthUiState.AwaitingOnboarding
         } else {
+            authRepository.currentUserId()?.let { NotificationsCenter.start(it) }
             AuthUiState.Ready
         }
     }
@@ -342,6 +345,7 @@ class AuthViewModel : ViewModel() {
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
+            NotificationsCenter.stop()
             _ownProfile.value = null
             _uiState.value = AuthUiState.Idle
         }

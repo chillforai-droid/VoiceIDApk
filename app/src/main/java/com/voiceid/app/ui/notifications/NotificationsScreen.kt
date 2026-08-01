@@ -15,60 +15,39 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voiceid.app.data.model.AppNotification
-import com.voiceid.app.data.remote.SupabaseModule
 import com.voiceid.app.data.repository.NotificationNav
 import com.voiceid.app.di.AppContainer
-import io.github.jan.supabase.realtime.PostgresAction
-import io.github.jan.supabase.realtime.decodeRecord
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.voiceid.app.notifications.NotificationsCenter
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class NotificationsViewModel : ViewModel() {
     private val notificationRepository = AppContainer.notificationRepository
 
-    private val _notifications = MutableStateFlow<List<AppNotification>>(emptyList())
-    val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(true)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    fun load() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _notifications.value = notificationRepository.latest()
-            _isLoading.value = false
-        }
-        val userId = SupabaseModule.currentUserId() ?: return
-        viewModelScope.launch {
-            notificationRepository.realtimeNotifications(userId).collect { action ->
-                if (action is PostgresAction.Insert) {
-                    val notif = action.decodeRecord<AppNotification>()
-                    _notifications.value = listOf(notif) + _notifications.value
-                }
-            }
-        }
-    }
+    // Root-cause fix: this screen used to run its own separate fetch + realtime
+    // subscription, entirely disconnected from the rest of the app (see NotificationsCenter
+    // for the full explanation). It now just displays the shared, always-on list — opening
+    // this screen no longer causes a second, redundant subscription.
+    val notifications: StateFlow<List<AppNotification>> = NotificationsCenter.notifications
 
     fun markRead(notification: AppNotification) {
         viewModelScope.launch {
             notificationRepository.markRead(notification.id)
-            _notifications.value = _notifications.value.map { if (it.id == notification.id) it.copy(isRead = true) else it }
+            NotificationsCenter.applyMarkRead(notification.id)
         }
     }
 
     fun markAllRead() {
         viewModelScope.launch {
             notificationRepository.markAllRead()
-            _notifications.value = _notifications.value.map { it.copy(isRead = true) }
+            NotificationsCenter.applyMarkAllRead()
         }
     }
 
     fun clearAll() {
         viewModelScope.launch {
             notificationRepository.clearAll()
-            _notifications.value = emptyList()
+            NotificationsCenter.applyClearAll()
         }
     }
 }

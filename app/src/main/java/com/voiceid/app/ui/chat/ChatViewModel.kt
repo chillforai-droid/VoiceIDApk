@@ -7,6 +7,7 @@ import com.voiceid.app.data.model.Message
 import com.voiceid.app.data.remote.SupabaseModule
 import com.voiceid.app.di.AppContainer
 import com.voiceid.app.media.MediaCache
+import com.voiceid.app.notifications.NotificationsCenter
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.decodeRecord
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,9 +31,17 @@ class ChatViewModel(context: Context) : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private var conversationId: String? = null
+
     val selfUserId: String? get() = SupabaseModule.currentUserId()
 
     fun open(conversationId: String) {
+        this.conversationId = conversationId
+        // Mirrors Web's ChatPage calling setActiveConversationId(conversationId) — lets
+        // NotificationsCenter mark a "message" notification for THIS conversation as read
+        // immediately if it arrives while the user is already looking at it, instead of
+        // showing an unread badge for something they can already see on screen.
+        NotificationsCenter.activeConversationId = conversationId
         viewModelScope.launch {
             _messages.value = messageRepository.history(conversationId)
             notificationRepository.markConversationRead(conversationId)
@@ -130,5 +139,12 @@ class ChatViewModel(context: Context) : ViewModel() {
 
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        if (NotificationsCenter.activeConversationId == conversationId) {
+            NotificationsCenter.activeConversationId = null
+        }
     }
 }
