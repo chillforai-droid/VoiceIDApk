@@ -26,6 +26,8 @@ import java.util.UUID
 private const val TAG = "VoiceID/GoogleAuth"
 
 sealed class AuthUiState {
+    /** Cold-start only: session restoration (awaitSessionResolved) is still in flight. */
+    object CheckingSession : AuthUiState()
     object Idle : AuthUiState()
     object Loading : AuthUiState()
     data class Error(val message: String) : AuthUiState()
@@ -37,7 +39,7 @@ class AuthViewModel : ViewModel() {
 
     private val authRepository = AppContainer.authRepository
 
-    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
+    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.CheckingSession)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     private val _ownProfile = MutableStateFlow<Profile?>(null)
@@ -227,8 +229,27 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    /** Post-auth onboarding gate check — API_REFERENCE.md §2 / BACKEND_README.md §2.3. */
+    /**
+     * Post-auth onboarding gate check — API_REFERENCE.md §2 / BACKEND_README.md §2.3.
+     *
+     * Root-cause fix: previously this called fetchOwnProfile() (which internally reads
+     * currentUserId()) immediately after signUp()/signIn() returned. That read can race
+     * supabase-kt's internal session-import pipeline (see AuthRepository.awaitAuthenticatedSession
+     * for the full explanation), which reads as `profile == null` — indistinguishable from
+     * "genuinely authenticated, but no profile row yet" — and incorrectly routed the user to
+     * AwaitingOnboarding without a real session. The subsequent claimUsername() call would
+     * then correctly, but confusingly, fail with "Not authenticated". Waiting for the
+     * reactive sessionStatus to actually reach Authenticated first closes that race.
+     */
     private suspend fun afterSignIn() {
+        val authenticated = authRepository.awaitAuthenticatedSession()
+        if (!authenticated) {
+            Log.e(TAG, "afterSignIn: sessionStatus never reached Authenticated after sign-in/up.")
+            _uiState.value = AuthUiState.Error(
+                "Sign-in succeeded but your session didn't activate. Please try again."
+            )
+            return
+        }
         val profile = authRepository.fetchOwnProfile()
         Log.d(TAG, "afterSignIn: fetchOwnProfile() -> ${if (profile == null) "null (needs onboarding)" else "username=${profile.username}"}")
         _ownProfile.value = profile
@@ -239,10 +260,21 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Session restoration on app launch. Root-cause fix: previously read currentUserId()
+     * synchronously, which can race the Auth plugin's own async load-from-storage job that
+     * starts when install(Auth) runs (SupabaseModule) — on a cold start this could read
+     * null before a real persisted session had finished loading, incorrectly showing the
+     * Welcome screen to an already-registered user. awaitSessionResolved() waits for that
+     * restore job to finish (Initializing -> something else) before we decide.
+     */
     fun checkExistingSession() {
         viewModelScope.launch {
+            authRepository.awaitSessionResolved()
             if (authRepository.currentUserId() != null) {
                 afterSignIn()
+            } else {
+                _uiState.value = AuthUiState.Idle
             }
         }
     }

@@ -10,7 +10,11 @@ import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val TAG = "VoiceID/GoogleAuth"
 
@@ -29,6 +33,49 @@ class AuthRepository {
     val sessionStatus: StateFlow<SessionStatus> = client.auth.sessionStatus
 
     fun currentUserId(): String? = client.auth.currentUserOrNull()?.id
+
+    /**
+     * ROOT CAUSE FIX for "Email Registration does not complete" / "Not authenticated" on
+     * VoiceID claim: previously, callers read currentUserId() synchronously immediately
+     * after signUp()/signInWith() returned. supabase-kt's auth plugin propagates a
+     * successful sign-in/sign-up into `sessionStatus` (and only then does
+     * currentUserOrNull() reflect it) through its own internal auth-event pipeline — this
+     * is the exact analogue of the web client's onAuthStateChange subscription
+     * (AuthContext.tsx), which is *reactive*, not an immediate synchronous read after
+     * calling supabase.auth.signUp()/signInWithPassword(). The web client never races this
+     * because AuthContext's `user` is always sourced from the listener, never from the
+     * signUp/signIn call's return value directly. This helper replicates that same
+     * reactive contract on Android: wait on the StateFlow itself for the Authenticated
+     * state to actually land, instead of trusting an immediate point-in-time read.
+     *
+     * Returns false only if no session actually becomes Authenticated within the timeout —
+     * which correctly happens if the account genuinely requires email confirmation, as
+     * opposed to a normal timing lag.
+     */
+    suspend fun awaitAuthenticatedSession(timeoutMillis: Long = 8000): Boolean {
+        return try {
+            withTimeout(timeoutMillis) {
+                client.auth.sessionStatus.first { it is SessionStatus.Authenticated }
+            }
+            true
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "awaitAuthenticatedSession: no Authenticated sessionStatus within ${timeoutMillis}ms " +
+                "(current=${client.auth.sessionStatus.value})")
+            false
+        }
+    }
+
+    /**
+     * Waits for the Auth plugin to finish resolving whatever persisted session may exist on
+     * disk (sessionStatus leaves Initializing), so a cold-start currentUserId() read
+     * reflects reality instead of racing the plugin's own async session-restore job. Used
+     * for session restoration on app launch — see MainActivity.kt.
+     */
+    suspend fun awaitSessionResolved(timeoutMillis: Long = 5000) {
+        withTimeoutOrNull(timeoutMillis) {
+            client.auth.sessionStatus.first { it !is SessionStatus.Initializing }
+        }
+    }
 
     /** Google native sign-in: exchange a Google ID token (from Credential Manager) for a Supabase session. */
     suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String?) {
