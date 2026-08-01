@@ -1,5 +1,6 @@
 package com.voiceid.app.data.repository
 
+import android.util.Log
 import com.voiceid.app.data.model.Profile
 import com.voiceid.app.data.remote.SupabaseModule
 import io.github.jan.supabase.auth.auth
@@ -10,6 +11,8 @@ import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.flow.StateFlow
+
+private const val TAG = "VoiceID/GoogleAuth"
 
 class AuthException(message: String) : Exception(message)
 
@@ -29,10 +32,21 @@ class AuthRepository {
 
     /** Google native sign-in: exchange a Google ID token (from Credential Manager) for a Supabase session. */
     suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String?) {
-        client.auth.signInWith(IDToken) {
-            this.idToken = idToken
-            provider = Google
-            nonce = rawNonce
+        Log.d(TAG, "AuthRepository.signInWithGoogleIdToken: POST .../auth/v1/token?grant_type=id_token " +
+            "provider=google nonce_present=${rawNonce != null}")
+        try {
+            client.auth.signInWith(IDToken) {
+                this.idToken = idToken
+                provider = Google
+                nonce = rawNonce
+            }
+            Log.d(TAG, "AuthRepository.signInWithGoogleIdToken: success, session established.")
+        } catch (e: Exception) {
+            // Re-throw unchanged — AuthViewModel is responsible for surfacing this to the UI.
+            // Logged here too so the exact Supabase-layer failure is visible even if a caller
+            // upstream is ever added that doesn't log it.
+            Log.e(TAG, "AuthRepository.signInWithGoogleIdToken: Supabase rejected the ID token exchange.", e)
+            throw e
         }
     }
 

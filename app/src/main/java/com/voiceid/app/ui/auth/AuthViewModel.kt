@@ -1,9 +1,13 @@
 package com.voiceid.app.ui.auth
 
 import android.app.Activity
+import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -18,6 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.util.UUID
+
+private const val TAG = "VoiceID/GoogleAuth"
 
 sealed class AuthUiState {
     object Idle : AuthUiState()
@@ -41,39 +47,132 @@ class AuthViewModel : ViewModel() {
     fun signInWithGoogle(activity: Activity) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            try {
-                val rawNonce = UUID.randomUUID().toString()
-                val hashedNonce = MessageDigest.getInstance("SHA-256")
-                    .digest(rawNonce.toByteArray())
-                    .joinToString("") { "%02x".format(it) }
+            Log.d(TAG, "STEP 0: signInWithGoogle() started. packageName=${activity.packageName}")
 
-                val googleIdOption = GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(BuildConfig.GOOGLE_WEB_CLIENT_ID)
-                    .setNonce(hashedNonce)
-                    .build()
+            // Fail fast and LOUD if the client ID was never configured — this is the #1 cause
+            // of a silent "loading then back to welcome" with no error, because Credential
+            // Manager will simply report NoCredentialException below instead of anything
+            // that names the real problem.
+            if (BuildConfig.GOOGLE_WEB_CLIENT_ID.isBlank() ||
+                BuildConfig.GOOGLE_WEB_CLIENT_ID.startsWith("YOUR_")
+            ) {
+                val msg = "GOOGLE_WEB_CLIENT_ID is not configured (still a placeholder: " +
+                    "'${BuildConfig.GOOGLE_WEB_CLIENT_ID}'). Set GOOGLE_WEB_CLIENT_ID in " +
+                    "local.properties to the OAuth 2.0 *Web application* client ID from the " +
+                    "same Google Cloud project as Supabase's Google provider."
+                Log.e(TAG, "STEP 1 FAILED (config): $msg")
+                _uiState.value = AuthUiState.Error(msg)
+                return@launch
+            }
 
-                val request = GetCredentialRequest.Builder()
-                    .addCredentialOption(googleIdOption)
-                    .build()
+            val rawNonce = UUID.randomUUID().toString()
+            val hashedNonce = MessageDigest.getInstance("SHA-256")
+                .digest(rawNonce.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+            Log.d(TAG, "STEP 1: Built Google ID token request. serverClientId(last12)=" +
+                "...${BuildConfig.GOOGLE_WEB_CLIENT_ID.takeLast(12)}")
 
+            val googleIdOption = GetGoogleIdOption.Builder()
+                .setFilterByAuthorizedAccounts(false)
+                .setServerClientId(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+                .setNonce(hashedNonce)
+                .build()
+
+            val request = GetCredentialRequest.Builder()
+                .addCredentialOption(googleIdOption)
+                .build()
+
+            // STEP 2 + 3: Launch the Credential Manager UI (account chooser) and retrieve
+            // whatever credential the user/OS returns.
+            val result = try {
+                Log.d(TAG, "STEP 2: Calling CredentialManager.getCredential() — account picker should appear now.")
                 val credentialManager = CredentialManager.create(activity)
-                val result = credentialManager.getCredential(activity, request)
-
-                val credential = result.credential
-                if (credential is CustomCredential &&
-                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                ) {
-                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                    authRepository.signInWithGoogleIdToken(googleIdTokenCredential.idToken, rawNonce)
-                    afterSignIn()
-                } else {
-                    _uiState.value = AuthUiState.Error("Unexpected credential type")
-                }
-            } catch (e: GoogleIdTokenParsingException) {
-                _uiState.value = AuthUiState.Error("Google sign-in failed: ${e.message}")
+                credentialManager.getCredential(activity, request)
+            } catch (e: GetCredentialCancellationException) {
+                // User dismissed the account picker. Not an error worth alarming over, but it
+                // must still be visible — this is one of the ways the flow can look "silent".
+                Log.w(TAG, "STEP 2/3: User cancelled the Google account picker.", e)
+                _uiState.value = AuthUiState.Idle
+                return@launch
+            } catch (e: NoCredentialException) {
+                // Most common real-world cause: no Google account on device, OR the Android
+                // OAuth client (package name + SHA-1) isn't registered in Google Cloud Console
+                // for this app, so Play Services refuses to return any credential.
+                val msg = "No Google credential available (NoCredentialException). Check: " +
+                    "(1) a Google account is signed in on this device, and " +
+                    "(2) an Android OAuth client for package '${activity.packageName}' with " +
+                    "this build's SHA-1 fingerprint exists in Google Cloud Console."
+                Log.e(TAG, "STEP 2/3 FAILED: $msg", e)
+                _uiState.value = AuthUiState.Error(msg)
+                return@launch
+            } catch (e: GetCredentialException) {
+                Log.e(TAG, "STEP 2/3 FAILED: GetCredentialException type=${e.type}", e)
+                _uiState.value = AuthUiState.Error("Google account selection failed: ${e.type} — ${e.message}")
+                return@launch
             } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error(e.message ?: "Google sign-in failed")
+                Log.e(TAG, "STEP 2/3 FAILED: unexpected exception during getCredential()", e)
+                _uiState.value = AuthUiState.Error(e.message ?: "Google account selection failed")
+                return@launch
+            }
+            Log.d(TAG, "STEP 3: Credential retrieved, type=${result.credential.type}")
+
+            val credential = result.credential
+            if (credential !is CustomCredential ||
+                credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+            ) {
+                Log.e(TAG, "STEP 4 FAILED: Unexpected credential type: ${credential.type}")
+                _uiState.value = AuthUiState.Error("Unexpected credential type: ${credential.type}")
+                return@launch
+            }
+
+            // STEP 4 + 5: Parse the Google ID token out of the credential payload.
+            val googleIdTokenCredential = try {
+                GoogleIdTokenCredential.createFrom(credential.data)
+            } catch (e: GoogleIdTokenParsingException) {
+                Log.e(TAG, "STEP 4/5 FAILED: Could not parse Google ID token credential.", e)
+                _uiState.value = AuthUiState.Error("Google sign-in failed: could not parse ID token (${e.message})")
+                return@launch
+            }
+            Log.d(TAG, "STEP 5: Parsed Google ID token for ${googleIdTokenCredential.id}. " +
+                "idToken length=${googleIdTokenCredential.idToken.length}")
+
+            // STEP 6 + 7: Exchange the Google ID token for a Supabase session.
+            try {
+                Log.d(TAG, "STEP 6: Calling Supabase signInWith(IDToken)...")
+                authRepository.signInWithGoogleIdToken(googleIdTokenCredential.idToken, rawNonce)
+                Log.d(TAG, "STEP 7: Supabase session created. userId=${authRepository.currentUserId()}")
+            } catch (e: Exception) {
+                // Deliberately not narrowed to one Supabase exception type — the supabase-kt
+                // auth call can surface as a generic RestException/AuthRestException/IOException
+                // depending on failure point (network vs 4xx from GoTrue), and every one of
+                // them must be logged with its real stacktrace and shown to the user, not
+                // caught silently.
+                val diagnosis = when {
+                    e.message?.contains("audience", ignoreCase = true) == true ->
+                        " (Likely cause: Supabase Google provider's 'Authorized Client IDs' does " +
+                            "not include this app's GOOGLE_WEB_CLIENT_ID.)"
+                    e.message?.contains("nonce", ignoreCase = true) == true ->
+                        " (Likely cause: nonce mismatch between the Credential Manager request and " +
+                            "the Supabase sign-in call.)"
+                    e.message?.contains("provider is not enabled", ignoreCase = true) == true ->
+                        " (Likely cause: Google provider is disabled in Supabase Auth settings.)"
+                    else -> ""
+                }
+                Log.e(TAG, "STEP 6/7 FAILED: Supabase signInWith(IDToken) threw.$diagnosis", e)
+                _uiState.value = AuthUiState.Error("Supabase sign-in failed: ${e.message}$diagnosis")
+                return@launch
+            }
+
+            // STEP 8 + 9 + 10: Session persistence, sessionStatus/auth-state update, and
+            // navigation are handled by afterSignIn() -> _uiState -> AuthNavGraph's
+            // LaunchedEffect(uiState), same path Email login already uses successfully.
+            try {
+                Log.d(TAG, "STEP 8/9: Checking session persistence + fetching profile for onboarding gate.")
+                afterSignIn()
+                Log.d(TAG, "STEP 10: uiState now ${_uiState.value} — navigation will follow from this.")
+            } catch (e: Exception) {
+                Log.e(TAG, "STEP 8/9 FAILED: session was created but post-auth profile check threw.", e)
+                _uiState.value = AuthUiState.Error("Signed in, but failed to load your profile: ${e.message}")
             }
         }
     }
@@ -131,6 +230,7 @@ class AuthViewModel : ViewModel() {
     /** Post-auth onboarding gate check — API_REFERENCE.md §2 / BACKEND_README.md §2.3. */
     private suspend fun afterSignIn() {
         val profile = authRepository.fetchOwnProfile()
+        Log.d(TAG, "afterSignIn: fetchOwnProfile() -> ${if (profile == null) "null (needs onboarding)" else "username=${profile.username}"}")
         _ownProfile.value = profile
         _uiState.value = if (profile == null || profile.username.isNullOrBlank()) {
             AuthUiState.AwaitingOnboarding

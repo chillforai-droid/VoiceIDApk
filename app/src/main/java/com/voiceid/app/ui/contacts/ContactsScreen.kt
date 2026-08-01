@@ -1,6 +1,5 @@
 package com.voiceid.app.ui.contacts
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -91,8 +90,7 @@ fun ContactsScreen(
     outgoing: List<ContactRow>,
     isLoading: Boolean,
     onAccept: (String) -> Unit,
-    onDecline: (String) -> Unit,
-    onOpenChat: (Profile) -> Unit
+    onDecline: (String) -> Unit
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("Contacts") }) }) { padding ->
         if (isLoading) {
@@ -137,7 +135,7 @@ fun ContactsScreen(
             }
             items(accepted, key = { it.contact.id }) { row ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().clickable { onOpenChat(row.otherUser) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AsyncImage(model = row.otherUser.avatarUrl, contentDescription = null, modifier = Modifier.size(44.dp).clip(CircleShape))

@@ -57,17 +57,28 @@ class ContactRepository {
         }.decodeList()
     }
 
-    /** SELECT * FROM profiles WHERE username ILIKE '%q%' OR display_name ILIKE '%q%' LIMIT 10 — API_REFERENCE.md §3.9 */
-    suspend fun searchUsers(query: String): List<Profile> {
-        if (query.isBlank()) return emptyList()
+    /**
+     * SELECT * FROM profiles WHERE (username ILIKE '%q%' OR display_name ILIKE '%q%') AND id <> auth.uid()
+     * ORDER BY username LIMIT/OFFSET (via range()) — same `profiles` search from API_REFERENCE.md §3.9,
+     * extended with self-exclusion and range()-based pagination. No schema or endpoint change.
+     *
+     * Accepts a leading "@" and surrounding whitespace so "@name", " @name ", and "name" all match
+     * the same way; ILIKE already makes the match case-insensitive.
+     */
+    suspend fun searchUsers(query: String, limit: Int = 20, offset: Int = 0): List<Profile> {
+        val trimmed = query.trim().removePrefix("@").trim()
+        if (trimmed.isBlank()) return emptyList()
+        val selfId = SupabaseModule.currentUserId()
         return client.from("profiles").select {
             filter {
                 or {
-                    ilike("username", "%$query%")
-                    ilike("display_name", "%$query%")
+                    ilike("username", "%$trimmed%")
+                    ilike("display_name", "%$trimmed%")
                 }
+                if (selfId != null) neq("id", selfId)
             }
-            limit(10)
+            order("username", Order.ASCENDING)
+            range(offset.toLong(), (offset + limit - 1).toLong())
         }.decodeList()
     }
 }

@@ -21,7 +21,8 @@ import androidx.compose.ui.unit.dp
 fun WelcomeScreen(
     onContinueWithGoogle: () -> Unit,
     onContinueWithEmail: () -> Unit,
-    isLoading: Boolean
+    isLoading: Boolean,
+    errorMessage: String? = null
 ) {
     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -66,6 +67,15 @@ fun WelcomeScreen(
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 Text("Continue with Email")
+            }
+            if (errorMessage != null) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
             }
         }
     }

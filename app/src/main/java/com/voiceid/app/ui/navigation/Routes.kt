@@ -17,11 +17,8 @@ object Routes {
     const val PROFILE = "profile"
     const val EDIT_PROFILE = "edit_profile"
     const val SETTINGS = "settings"
-    const val USER_PROFILE = "user_profile/{userId}"
     const val ACTIVE_CALL = "active_call"
 
     fun chat(conversationId: String, otherUserId: String, otherUserName: String) =
         "chat/$conversationId/$otherUserId/$otherUserName"
-
-    fun userProfile(userId: String) = "user_profile/$userId"
 }

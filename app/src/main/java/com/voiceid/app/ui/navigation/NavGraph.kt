@@ -13,7 +13,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.voiceid.app.data.model.Profile
 import com.voiceid.app.data.remote.SupabaseModule
 import com.voiceid.app.ui.auth.*
 import com.voiceid.app.ui.call.ActiveCallScreen
@@ -69,7 +68,8 @@ fun AuthNavGraph(authViewModel: AuthViewModel, onAuthenticated: () -> Unit) {
             WelcomeScreen(
                 onContinueWithGoogle = { authViewModel.signInWithGoogle(context as android.app.Activity) },
                 onContinueWithEmail = { navController.navigate(Routes.LOGIN) },
-                isLoading = isLoading
+                isLoading = isLoading,
+                errorMessage = errorMessage
             )
         }
         composable(Routes.LOGIN) {
@@ -180,14 +180,24 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
             }
             composable(Routes.SEARCH) {
                 val vm: SearchViewModel = viewModel()
+                LaunchedEffect(Unit) { vm.initialize() }
                 val results by vm.results.collectAsState()
                 val isSearching by vm.isSearching.collectAsState()
+                val isLoadingMore by vm.isLoadingMore.collectAsState()
+                val errorMessage by vm.errorMessage.collectAsState()
+                val recentSearches by vm.recentSearches.collectAsState()
+                val pendingRequestIds by vm.pendingRequestIds.collectAsState()
                 SearchScreen(
                     results = results,
                     isSearching = isSearching,
+                    isLoadingMore = isLoadingMore,
+                    errorMessage = errorMessage,
+                    recentSearches = recentSearches,
+                    pendingRequestIds = pendingRequestIds,
                     onQueryChanged = vm::onQueryChanged,
-                    onSendRequest = { profile -> vm.sendFriendRequest(profile.id) {} },
-                    onOpenProfile = { }
+                    onLoadMore = vm::loadMore,
+                    onRetry = vm::retry,
+                    onSendRequest = { result -> vm.sendFriendRequest(result.profile.id) }
                 )
             }
             composable(Routes.CONTACTS) {
@@ -200,10 +210,7 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
                 val isLoading by vm.isLoading.collectAsState()
                 ContactsScreen(
                     accepted = accepted, incoming = incoming, outgoing = outgoing, isLoading = isLoading,
-                    onAccept = vm::accept, onDecline = vm::decline,
-                    onOpenChat = { profile: Profile ->
-                        navController.navigate(Routes.userProfile(profile.id))
-                    }
+                    onAccept = vm::accept, onDecline = vm::decline
                 )
             }
             composable(Routes.CALL_HISTORY) {

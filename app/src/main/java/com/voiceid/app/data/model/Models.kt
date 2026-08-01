@@ -110,6 +110,16 @@ data class UserSettings(
     @SerialName("notify_calls") val notifyCalls: Boolean = true
 )
 
+/** Relationship between the current user and a searched profile, derived from `contacts.status`. */
+enum class FriendStatus { NONE, PENDING, FRIENDS }
+
+/** Convenience UI-layer projection: a searched profile joined with friend status + presence. */
+data class SearchResult(
+    val profile: Profile,
+    val friendStatus: FriendStatus,
+    val isOnline: Boolean
+)
+
 /** Convenience UI-layer projection: a conversation joined with the other participant + last message preview. */
 data class ConversationSummary(
     val conversation: Conversation,
