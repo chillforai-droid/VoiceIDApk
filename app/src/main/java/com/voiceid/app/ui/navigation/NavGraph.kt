@@ -55,6 +55,7 @@ fun AuthNavGraph(authViewModel: AuthViewModel, onAuthenticated: () -> Unit) {
     LaunchedEffect(uiState) {
         when (uiState) {
             is AuthUiState.AwaitingOnboarding -> navController.navigate(Routes.CHOOSE_USERNAME) { launchSingleTop = true }
+            is AuthUiState.AwaitingEmailConfirmation -> navController.navigate(Routes.CHECK_EMAIL) { launchSingleTop = true }
             is AuthUiState.Ready -> onAuthenticated()
             else -> {}
         }
@@ -102,6 +103,13 @@ fun AuthNavGraph(authViewModel: AuthViewModel, onAuthenticated: () -> Unit) {
                 isLoading = isLoading,
                 errorMessage = errorMessage,
                 onClaim = { username, displayName -> authViewModel.claimUsername(username, displayName) }
+            )
+        }
+        composable(Routes.CHECK_EMAIL) {
+            val awaitingState = uiState as? AuthUiState.AwaitingEmailConfirmation
+            CheckEmailScreen(
+                email = awaitingState?.email ?: "",
+                onBackToLogin = { navController.navigate(Routes.LOGIN) { popUpTo(Routes.WELCOME) } }
             )
         }
     }

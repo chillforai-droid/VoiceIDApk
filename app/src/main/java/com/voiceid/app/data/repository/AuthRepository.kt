@@ -1,9 +1,11 @@
 package com.voiceid.app.data.repository
 
+import android.content.Intent
 import android.util.Log
 import com.voiceid.app.data.model.Profile
 import com.voiceid.app.data.remote.SupabaseModule
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.handleDeeplinks
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.providers.builtin.IDToken
@@ -97,16 +99,46 @@ class AuthRepository {
         }
     }
 
-    /** Email/password sign up — validation mirrors lib/validation.ts::signUpSchema (name>=2, valid email, password>=8). */
+    /**
+     * Custom-scheme deep link Supabase's confirmation email will point at (via
+     * emailRedirectTo below). Reuses the SAME intent-filter (com.voiceid.app://auth-callback)
+     * already registered in AndroidManifest.xml for the Google OAuth native redirect — no
+     * new manifest entry, no Digital Asset Links / App Links verification needed, because a
+     * custom scheme (not an https:// App Link) is claimed directly by the app.
+     */
+    private val authCallbackRedirectUrl = "com.voiceid.app://auth-callback"
+
+    /**
+     * Email/password sign up — validation mirrors lib/validation.ts::signUpSchema (name>=2, valid email, password>=8).
+     *
+     * Verified (2026-08-01): this Supabase project has "Confirm email" enabled — a fresh
+     * sign-up does NOT return an active session; the account only becomes usable after the
+     * user taps the confirmation link Supabase emails them. redirectUrl here is what makes
+     * that link openable by the Android app itself (see handleAuthDeeplink) instead of only
+     * landing in a browser the way it would with no redirectUrl set.
+     */
     suspend fun signUp(email: String, password: String, fullName: String) {
         require(fullName.trim().length >= 2) { "Name must be at least 2 characters" }
         require(password.length >= 8) { "Password must be at least 8 characters" }
-        client.auth.signUpWith(Email) {
+        client.auth.signUpWith(Email, redirectUrl = authCallbackRedirectUrl) {
             this.email = email
             this.password = password
             data = kotlinx.serialization.json.buildJsonObject {
                 put("full_name", kotlinx.serialization.json.JsonPrimitive(fullName))
             }
+        }
+    }
+
+    /**
+     * Parses an incoming Intent for a Supabase auth deep link (email confirmation link,
+     * magic link, etc.) and imports the resulting session if present. Safe to call with any
+     * intent — a no-op if it doesn't contain Supabase auth data. Called from
+     * MainActivity.onCreate/onNewIntent via AuthViewModel.handleAuthDeeplink.
+     */
+    fun handleAuthDeeplink(intent: Intent, onSessionImported: () -> Unit = {}) {
+        client.handleDeeplinks(intent) {
+            Log.i(TAG, "handleAuthDeeplink: session imported from deep link (e.g. email confirmation).")
+            onSessionImported()
         }
     }
 

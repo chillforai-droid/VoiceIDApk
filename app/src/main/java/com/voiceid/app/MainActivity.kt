@@ -1,13 +1,14 @@
 package com.voiceid.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.voiceid.app.ui.auth.AuthUiState
 import com.voiceid.app.ui.auth.AuthViewModel
 import com.voiceid.app.ui.navigation.AuthNavGraph
@@ -17,25 +18,41 @@ import com.voiceid.app.ui.theme.ThemePreferences
 import com.voiceid.app.ui.theme.VoiceIdTheme
 
 class MainActivity : ComponentActivity() {
+
+    // Activity-scoped (not created inside the Composable) specifically so onCreate/onNewIntent
+    // can hand it an incoming deep link — e.g. the com.voiceid.app://auth-callback link tapped
+    // from an email-confirmation email — using the SAME instance the UI observes, rather than a
+    // separate one that would silently miss the intent.
+    private val authViewModel: AuthViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        authViewModel.handleAuthDeeplink(intent)
 
         setContent {
             val themePreferences = remember { ThemePreferences(applicationContext) }
             val themeMode by themePreferences.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
 
             VoiceIdTheme(themeMode = themeMode) {
-                VoiceIdApp()
+                VoiceIdApp(authViewModel)
             }
         }
+    }
+
+    // MainActivity is launchMode="singleTask" (AndroidManifest.xml), so a deep link tapped
+    // while the app is already running arrives here instead of a new onCreate.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        authViewModel.handleAuthDeeplink(intent)
     }
 }
 
 @Composable
-private fun VoiceIdApp() {
-    val authViewModel: AuthViewModel = viewModel()
+private fun VoiceIdApp(authViewModel: AuthViewModel) {
     val uiState by authViewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) { authViewModel.checkExistingSession() }

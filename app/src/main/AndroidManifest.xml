@@ -52,7 +52,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep link target for the Supabase Google OAuth native redirect -->
+            <!-- Deep link target shared by: (1) the Supabase Google OAuth native redirect,
+                 and (2) the emailRedirectTo link Supabase sends in sign-up confirmation
+                 emails (AuthRepository.signUp / AUTH_CALLBACK_REDIRECT_URL) — both land
+                 here and are parsed via handleDeeplinks() in AuthViewModel. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

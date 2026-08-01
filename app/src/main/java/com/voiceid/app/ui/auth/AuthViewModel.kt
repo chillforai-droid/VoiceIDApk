@@ -32,6 +32,7 @@ sealed class AuthUiState {
     object Loading : AuthUiState()
     data class Error(val message: String) : AuthUiState()
     object AwaitingOnboarding : AuthUiState()
+    data class AwaitingEmailConfirmation(val email: String) : AuthUiState()
     object Ready : AuthUiState()
 }
 
@@ -208,7 +209,19 @@ class AuthViewModel : ViewModel() {
             _uiState.value = AuthUiState.Loading
             try {
                 authRepository.signUp(email, password, fullName)
-                afterSignIn()
+                // Verified (2026-08-01, real device test): this Supabase project requires
+                // email confirmation, so "no session yet" right after signUp() is the
+                // expected, successful outcome — not a race to recover from. Give the SDK a
+                // short window in case a session does come back immediately (in case this
+                // project setting is ever turned off), but don't block on the full sign-in
+                // wait timeout, and don't surface it as an error either way.
+                val authenticated = authRepository.awaitAuthenticatedSession(timeoutMillis = 2500)
+                if (authenticated) {
+                    afterSignIn()
+                } else {
+                    Log.d(TAG, "signUp: no session yet — email confirmation required, as expected.")
+                    _uiState.value = AuthUiState.AwaitingEmailConfirmation(email)
+                }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(e.message ?: "Sign up failed")
             }
@@ -222,8 +235,29 @@ class AuthViewModel : ViewModel() {
                 authRepository.signInWithPassword(email, password)
                 afterSignIn()
             } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error(e.message ?: "Invalid email or password")
+                val msg = e.message ?: ""
+                _uiState.value = if (msg.contains("email_not_confirmed", ignoreCase = true) ||
+                    msg.contains("Email not confirmed", ignoreCase = true)
+                ) {
+                    // Same account-state as the post-signUp case above — route to the same
+                    // "check your email" screen instead of a raw backend error string.
+                    AuthUiState.AwaitingEmailConfirmation(email)
+                } else {
+                    AuthUiState.Error(msg.ifBlank { "Invalid email or password" })
+                }
             }
+        }
+    }
+
+    /**
+     * Called from MainActivity.onCreate/onNewIntent for the com.voiceid.app://auth-callback
+     * deep link — handles a tapped email-confirmation link (or magic link) by importing the
+     * session it carries, then running the same post-auth onboarding check every other
+     * sign-in path uses.
+     */
+    fun handleAuthDeeplink(intent: android.content.Intent) {
+        authRepository.handleAuthDeeplink(intent) {
+            viewModelScope.launch { afterSignIn() }
         }
     }
 
@@ -270,7 +304,9 @@ class AuthViewModel : ViewModel() {
         if (!authenticated) {
             Log.e(TAG, "afterSignIn: sessionStatus never reached Authenticated after sign-in/up.")
             _uiState.value = AuthUiState.Error(
-                "Sign-in succeeded but your session didn't activate. Please try again."
+                "Sign-in succeeded but your session didn't activate. If you haven't " +
+                    "confirmed your email yet, check your inbox for a confirmation link " +
+                    "first — otherwise, please try again."
             )
             return
         }

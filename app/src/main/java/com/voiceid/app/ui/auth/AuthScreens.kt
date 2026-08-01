@@ -297,3 +297,31 @@ fun ChooseUsernameScreen(
         }
     }
 }
+
+@Composable
+fun CheckEmailScreen(
+    email: String,
+    onBackToLogin: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Confirm your email", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "We've sent a confirmation link to $email. Tap it to activate your account — " +
+                "you'll be brought straight back into VoiceID.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "Already confirmed? Just sign in below.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = onBackToLogin) { Text("Back to sign in") }
+    }
+}
