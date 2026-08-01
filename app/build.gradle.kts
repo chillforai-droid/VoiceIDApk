@@ -44,6 +44,18 @@ android {
     }
 
     signingConfigs {
+        // Checked into the repo deliberately — this is a plain debug key (password
+        // "android", same convention Android Studio itself uses for its own
+        // auto-generated debug.keystore), not a production secret. The only thing that
+        // matters is that its SHA-1 stays IDENTICAL across every CI run, which it can't
+        // do if we let Gradle auto-generate a fresh one on every fresh runner (root cause
+        // of the "different SHA-1 every build" issue — see debug.keystore.README.md).
+        getByName("debug") {
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             val localProperties = Properties()
             val localPropertiesFile = rootProject.file("local.properties")

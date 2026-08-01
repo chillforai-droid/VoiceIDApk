@@ -49,7 +49,31 @@ class AuthViewModel : ViewModel() {
     fun signInWithGoogle(activity: Activity) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            Log.d(TAG, "STEP 0: signInWithGoogle() started. packageName=${activity.packageName}")
+
+            // ---- RUNTIME CONFIG DIAGNOSTIC (items 1-7, printed verbatim, no inference) ----
+            val maskedClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID.let { id ->
+                if (id.length <= 16) id else "${id.take(8)}...MASKED...${id.takeLast(8)}"
+            }
+            val filterByAuthorizedAccounts = false // literal value passed below; kept as a
+            // named val so this log line can never drift from the actual call.
+            // Note: "applicationId" (the Gradle build-time value) has no independent runtime
+            // API — the only place it's observable inside a running app IS
+            // BuildConfig.APPLICATION_ID and context.packageName, both generated/set from it
+            // at build time. So items 1-3 below are three separate reads that should all
+            // agree; printing all three (rather than assuming BuildConfig.APPLICATION_ID
+            // alone is proof) is what catches a mismatch if e.g. a manifest merge, a product
+            // flavor, or a manual manifest package override ever made them diverge.
+            Log.i(TAG, "GOOGLE_SIGNIN_CONFIG " +
+                "[1] applicationId(==BuildConfig.APPLICATION_ID, no separate runtime API exists)=${BuildConfig.APPLICATION_ID} " +
+                "| [2] packageName(runtime, PackageManager/Context)=${activity.packageName} " +
+                "| [3] BuildConfig.APPLICATION_ID=${BuildConfig.APPLICATION_ID} " +
+                "| [4] GOOGLE_WEB_CLIENT_ID(masked)=$maskedClientId " +
+                "| [5] credentialManagerRequest=GetCredentialRequest[GetGoogleIdOption] " +
+                "(native Google ID token / One Tap-style request — NOT the legacy " +
+                "Google Sign-In SDK, NOT a redirect-based OAuth flow) " +
+                "| [6] serverClientId(passed to GoogleIdOption.Builder.setServerClientId)=$maskedClientId " +
+                "| [7] filterByAuthorizedAccounts=$filterByAuthorizedAccounts")
+            // ---------------------------------------------------------------------------
 
             // Fail fast and LOUD if the client ID was never configured — this is the #1 cause
             // of a silent "loading then back to welcome" with no error, because Credential
@@ -75,7 +99,7 @@ class AuthViewModel : ViewModel() {
                 "...${BuildConfig.GOOGLE_WEB_CLIENT_ID.takeLast(12)}")
 
             val googleIdOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(false)
+                .setFilterByAuthorizedAccounts(filterByAuthorizedAccounts)
                 .setServerClientId(BuildConfig.GOOGLE_WEB_CLIENT_ID)
                 .setNonce(hashedNonce)
                 .build()
