@@ -52,7 +52,8 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
             TextMessageInsert(
                 conversationId = conversationId,
                 senderId = userId,
-                contentBody = body
+                contentBody = body,
+                contentType = "text"
             )
         )
     }
@@ -75,8 +76,10 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
                 id = messageId,
                 conversationId = conversationId,
                 senderId = userId,
+                contentType = "voice",
                 b2ObjectKey = upload.objectKey,
                 sha256 = sha256,
+                mediaStatus = "pending",
                 duration = durationSeconds,
                 mimeType = mimeType,
                 byteSize = file.length()
@@ -96,8 +99,10 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
             ImageMessageInsert(
                 conversationId = conversationId,
                 senderId = userId,
+                contentType = "image",
                 b2ObjectKey = upload.objectKey,
                 sha256 = sha256,
+                mediaStatus = "delivered",
                 mimeType = mimeType,
                 byteSize = file.length()
             )

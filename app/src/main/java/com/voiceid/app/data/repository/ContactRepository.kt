@@ -14,7 +14,7 @@ class ContactRepository {
 
     suspend fun sendFriendRequest(responderId: String) {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
-        client.from("contacts").insert(ContactInsert(requesterId = userId, responderId = responderId))
+        client.from("contacts").insert(ContactInsert(requesterId = userId, responderId = responderId, status = "pending"))
     }
 
     suspend fun acceptRequest(contactId: String) {

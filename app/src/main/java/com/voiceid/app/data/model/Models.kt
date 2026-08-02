@@ -34,7 +34,7 @@ data class Contact(
 data class ContactInsert(
     @SerialName("requester_id") val requesterId: String,
     @SerialName("responder_id") val responderId: String,
-    @SerialName("status") val status: String = "pending"
+    @SerialName("status") val status: String
 )
 
 /** Mirrors `conversations` table. */
@@ -137,13 +137,25 @@ data class ConversationSummary(
  * for `Any` — there's no way to know at compile time what's actually inside it — so every
  * text/voice/image send crashed with "Serializer for class 'Any' is not found." These
  * @Serializable data classes give every field a concrete, known type instead.
+ *
+ * BUG FIX #2 (2026-08-02): giving content_type/media_status default values (e.g.
+ * `= "voice"`) here looked harmless, but kotlinx.serialization's Json encoder does NOT
+ * write a field to the JSON body when the value passed in equals that field's default
+ * (encodeDefaults is false unless explicitly turned on) — and Postgrest-kt uses that
+ * encoded JSON verbatim as the insert body, deriving the `columns=` list PostgREST sees
+ * from whatever keys actually made it into the JSON. So every voice/image send silently
+ * dropped content_type AND media_status from the request entirely, and Postgres rejected
+ * the insert with "null value in column content_type... violates not-null constraint"
+ * (messages.content_type has no column-level default, unlike content_body). Removing the
+ * defaults here forces every field to always be written by the caller AND always encoded
+ * into the JSON body, regardless of any Json/serializer configuration.
  */
 @Serializable
 data class TextMessageInsert(
     @SerialName("conversation_id") val conversationId: String,
     @SerialName("sender_id") val senderId: String,
     @SerialName("content_body") val contentBody: String,
-    @SerialName("content_type") val contentType: String = "text"
+    @SerialName("content_type") val contentType: String
 )
 
 @Serializable
@@ -151,10 +163,10 @@ data class VoiceMessageInsert(
     @SerialName("id") val id: String,
     @SerialName("conversation_id") val conversationId: String,
     @SerialName("sender_id") val senderId: String,
-    @SerialName("content_type") val contentType: String = "voice",
+    @SerialName("content_type") val contentType: String,
     @SerialName("b2_object_key") val b2ObjectKey: String,
     @SerialName("sha256") val sha256: String,
-    @SerialName("media_status") val mediaStatus: String = "pending",
+    @SerialName("media_status") val mediaStatus: String,
     @SerialName("duration") val duration: Int,
     @SerialName("mime_type") val mimeType: String,
     @SerialName("byte_size") val byteSize: Long
@@ -164,10 +176,10 @@ data class VoiceMessageInsert(
 data class ImageMessageInsert(
     @SerialName("conversation_id") val conversationId: String,
     @SerialName("sender_id") val senderId: String,
-    @SerialName("content_type") val contentType: String = "image",
+    @SerialName("content_type") val contentType: String,
     @SerialName("b2_object_key") val b2ObjectKey: String,
     @SerialName("sha256") val sha256: String,
-    @SerialName("media_status") val mediaStatus: String = "delivered",
+    @SerialName("media_status") val mediaStatus: String,
     @SerialName("mime_type") val mimeType: String,
     @SerialName("byte_size") val byteSize: Long
 )
