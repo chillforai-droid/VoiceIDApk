@@ -61,12 +61,13 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
 
     /**
      * TEMPORARY DIAGNOSTIC (2026-08-02b): server-side [MediaAuth] logs show
-     * authorizationPresent=false for /api/media/* while the SAME app session's
-     * /api/cloudinary-sign call DID carry a valid Authorization header. Since uploadRaw()/
-     * requestDownloadAuth()/etc. below all call .header("Authorization", ...) unconditionally,
-     * that should be impossible — so log here, on the Android side, immediately after the
-     * OkHttp Request is built and before it's sent, to see what Android itself thinks it's
-     * sending. Compare this against the Vercel [MediaAuth] log for the same request.
+     * authorizationPresent=false for the media upload/download endpoints while the SAME app
+     * session's /api/cloudinary-sign call DID carry a valid Authorization header. Since
+     * uploadRaw()/requestDownloadAuth()/etc. below all call .header("Authorization", ...)
+     * unconditionally, that should be impossible — so log here, on the Android side,
+     * immediately after the OkHttp Request is built and before it's sent, to see what Android
+     * itself thinks it's sending. Compare this against the Vercel [MediaAuth] log for the same
+     * request.
      */
     private fun logPreflight(request: Request) {
         val h = request.header("Authorization")
