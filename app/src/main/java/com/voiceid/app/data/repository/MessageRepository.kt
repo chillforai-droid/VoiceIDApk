@@ -62,7 +62,7 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
      * Voice message: upload raw bytes to /api/media/upload (§1.1), then INSERT the messages
      * row per §3.3 — duration REQUIRED (1-120s), matching the valid_voice_metadata CHECK.
      */
-    suspend fun sendVoice(conversationId: String, file: File, durationSeconds: Int, mimeType: String) {
+    suspend fun sendVoice(conversationId: String, file: File, durationSeconds: Int, mimeType: String): String {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
         val token = SupabaseModule.freshAccessToken() ?: throw AuthException("No session token")
         require(durationSeconds in 1..120) { "Voice message duration must be 1-120 seconds" }
@@ -85,17 +85,18 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
                 byteSize = file.length()
             )
         )
+        return messageId
     }
 
     /** Image message: same upload path, media_status set to 'delivered' immediately per §3.3/§7.2. */
-    suspend fun sendImage(conversationId: String, file: File, mimeType: String) {
+    suspend fun sendImage(conversationId: String, file: File, mimeType: String): String {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
         val token = SupabaseModule.freshAccessToken() ?: throw AuthException("No session token")
 
         val sha256 = sha256Hex(file)
         val upload = mediaApi.uploadRaw(token, file, mimeType)
 
-        client.from("messages").insert(
+        val inserted = client.from("messages").insert(
             ImageMessageInsert(
                 conversationId = conversationId,
                 senderId = userId,
@@ -106,7 +107,8 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
                 mimeType = mimeType,
                 byteSize = file.length()
             )
-        )
+        ) { select() }.decodeSingle<Message>()
+        return inserted.id
     }
 
     /** Recipient-side media fetch + best-effort ack, per §1.3/§1.4/§7.3. */

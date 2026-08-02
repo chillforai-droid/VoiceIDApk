@@ -89,7 +89,10 @@ class ChatViewModel(context: Context) : ViewModel() {
         viewModelScope.launch {
             _isSending.value = true
             try {
-                messageRepository.sendVoice(conversationId, file, durationSeconds, mimeType)
+                val messageId = messageRepository.sendVoice(conversationId, file, durationSeconds, mimeType)
+                // Cache immediately: this is the exact file we just uploaded, so there's no
+                // need to ever re-download our own sent voice message from B2 to play it back.
+                mediaCache.putFile(messageId, file)
             } catch (e: Exception) {
                 _errorMessage.value = e.message
             } finally {
@@ -102,7 +105,8 @@ class ChatViewModel(context: Context) : ViewModel() {
         viewModelScope.launch {
             _isSending.value = true
             try {
-                messageRepository.sendImage(conversationId, file, mimeType)
+                val messageId = messageRepository.sendImage(conversationId, file, mimeType)
+                mediaCache.putFile(messageId, file)
             } catch (e: Exception) {
                 _errorMessage.value = e.message
             } finally {
@@ -120,7 +124,7 @@ class ChatViewModel(context: Context) : ViewModel() {
                 val file = mediaCache.put(message.id, bytes)
                 onReady(file)
             } catch (e: Exception) {
-                _errorMessage.value = "Could not load media: ${e.message}"
+                _errorMessage.value = "Could not load media: ${e.message ?: e.javaClass.simpleName}"
             }
         }
     }

@@ -181,7 +181,17 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 }
                 throw MediaApiException(resp.code, errorBody)
             }
+            // BUG FIX (2026-08-02c): gson.fromJson() on a blank/empty body returns Java `null`
+            // with no exception. Because this function's return type is a generic `T` (erased
+            // at runtime), Kotlin can't insert its usual not-null check at the return here, so
+            // that null silently flowed back to callers as if it were a real object — e.g.
+            // requestDownloadAuth() returning a "DownloadAuthResponse" that's actually null.
+            // The very next `.url` access then crashed with a bare JVM NullPointerException,
+            // which on many Android versions has NO message at all, surfacing to the user as
+            // "Could not load media: null" with no clue what went wrong. Fail loudly here
+            // instead, with the response body's actual content in the message.
             return gson.fromJson(bodyStr, clazz)
+                ?: throw MediaApiException(resp.code, ApiErrorBody(error = "Empty or invalid response body from ${request.url}: '$bodyStr'"))
         }
     }
 
