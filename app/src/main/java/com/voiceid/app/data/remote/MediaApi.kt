@@ -59,6 +59,23 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
 
     private fun authHeader(token: String) = "Bearer $token"
 
+    /**
+     * TEMPORARY DIAGNOSTIC (2026-08-02b): server-side [MediaAuth] logs show
+     * authorizationPresent=false for /api/media/* while the SAME app session's
+     * /api/cloudinary-sign call DID carry a valid Authorization header. Since uploadRaw()/
+     * requestDownloadAuth()/etc. below all call .header("Authorization", ...) unconditionally,
+     * that should be impossible — so log here, on the Android side, immediately after the
+     * OkHttp Request is built and before it's sent, to see what Android itself thinks it's
+     * sending. Compare this against the Vercel [MediaAuth] log for the same request.
+     */
+    private fun logPreflight(request: Request) {
+        val h = request.header("Authorization")
+        Log.i(
+            TAG_401,
+            "PRE-FLIGHT ${request.method} ${request.url} — Authorization header on OkHttp Request: present=${h != null} length=${h?.length ?: 0}"
+        )
+    }
+
     /** POST /api/media/upload — raw binary body, matches API_REFERENCE.md §1.1 exactly. */
     suspend fun uploadRaw(token: String, file: File, mimeType: String): UploadResponse = withContext(Dispatchers.IO) {
         val body = file.asRequestBody(mimeType.toMediaTypeOrNull())
@@ -68,6 +85,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .header("Content-Type", mimeType)
             .post(body)
             .build()
+        logPreflight(request) // TEMPORARY DIAGNOSTIC
         execute(request, UploadResponse::class.java)
     }
 
@@ -80,6 +98,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .header("Content-Type", "application/json")
             .post(json.toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
+        logPreflight(request) // TEMPORARY DIAGNOSTIC
         execute(request, UploadAuthResponse::class.java)
     }
 
@@ -105,6 +124,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .header("Content-Type", "application/json")
             .post(json.toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
+        logPreflight(request) // TEMPORARY DIAGNOSTIC
         execute(request, DownloadAuthResponse::class.java)
     }
 
@@ -130,6 +150,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 .header("Content-Type", "application/json")
                 .post(json.toRequestBody("application/json".toMediaTypeOrNull()))
                 .build()
+            logPreflight(request) // TEMPORARY DIAGNOSTIC
             http.newCall(request).execute().close()
         } catch (_: Exception) {
             // best-effort cleanup signal only, per API_REFERENCE.md §1.4 — never surfaced to the user
@@ -143,6 +164,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .header("Authorization", authHeader(token))
             .delete()
             .build()
+        logPreflight(request) // TEMPORARY DIAGNOSTIC
         http.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) throw MediaApiException(resp.code, null)
         }
