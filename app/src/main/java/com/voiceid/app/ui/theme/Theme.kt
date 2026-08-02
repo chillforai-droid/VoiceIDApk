@@ -37,7 +37,11 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 @Composable
 fun VoiceIdTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    dynamicColor: Boolean = true,
+    // Was `true`: on Android 12+ this let Material You override the brand palette with
+    // whatever colors it derived from the user's wallpaper, so the app's accent color would
+    // randomly shift device to device and never reliably match the indigo/violet VoiceID brand
+    // used on the web app — the opposite of the intended "professional, consistent" look.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()

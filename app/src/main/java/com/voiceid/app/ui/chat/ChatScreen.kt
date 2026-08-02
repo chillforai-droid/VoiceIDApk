@@ -118,6 +118,15 @@ fun ChatScreen(
         bottomBar = {
             Surface(shadowElevation = 4.dp) {
                 Column {
+                    // ROOT CAUSE FIX ("no animation while uploading image/audio"): isSending was
+                    // already tracked in ChatViewModel and used to disable the send button, but
+                    // nothing ever rendered it, so an image/voice upload gave zero visible
+                    // feedback until it either finished or errored. AnimatedVisibility fades this
+                    // indeterminate bar in/out for every send path (text, voice, image) since all
+                    // three share the same isSending flag.
+                    androidx.compose.animation.AnimatedVisibility(visible = isSending) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
                     if (isRecording) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -137,7 +146,7 @@ fun ChatScreen(
                             modifier = Modifier.fillMaxWidth().padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = { imagePicker.launch("image/*") }) {
+                            IconButton(onClick = { imagePicker.launch("image/*") }, enabled = !isSending) {
                                 Icon(Icons.Filled.Image, contentDescription = "Send image")
                             }
                             OutlinedTextField(

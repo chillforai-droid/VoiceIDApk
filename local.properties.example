@@ -15,6 +15,10 @@ API_BASE_URL=https://voiceid.online
 # This is required for Google Sign-In via Credential Manager / One Tap on Android.
 GOOGLE_WEB_CLIENT_ID=YOUR_CLIENT_ID.apps.googleusercontent.com
 
+# Same Cloudinary cloud as the web client's VITE_CLOUDINARY_CLOUD_NAME (see lib/profileActions.ts).
+# Required for avatar upload to actually reach the right Cloudinary account.
+CLOUDINARY_CLOUD_NAME=YOUR_CLOUDINARY_CLOUD_NAME
+
 # Optional: release signing (omit to fall back to debug signing for CI builds)
 RELEASE_STORE_FILE=release.keystore
 RELEASE_STORE_PASSWORD=

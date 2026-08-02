@@ -40,6 +40,11 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${prop("SUPABASE_ANON_KEY", "YOUR_SUPABASE_ANON_KEY")}\"")
         buildConfigField("String", "API_BASE_URL", "\"${prop("API_BASE_URL", "https://voiceid.online")}\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${prop("GOOGLE_WEB_CLIENT_ID", "YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com")}\"")
+        // Same Cloudinary cloud used by the web client's VITE_CLOUDINARY_CLOUD_NAME (profileActions.ts) —
+        // ROOT CAUSE of "avatar upload not working": this was previously hardcoded as the literal
+        // string "voiceid" at the NavGraph call site instead of coming from real project config, so
+        // it silently pointed at a Cloudinary account that doesn't exist for this project.
+        buildConfigField("String", "CLOUDINARY_CLOUD_NAME", "\"${prop("CLOUDINARY_CLOUD_NAME", "YOUR_CLOUDINARY_CLOUD_NAME")}\"")
         manifestPlaceholders["appAuthRedirectScheme"] = "com.voiceid.app"
     }
 

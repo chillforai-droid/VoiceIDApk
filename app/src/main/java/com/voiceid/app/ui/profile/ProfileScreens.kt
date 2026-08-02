@@ -3,10 +3,13 @@ package com.voiceid.app.ui.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -108,13 +111,34 @@ fun EditProfileScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                AsyncImage(
-                    model = pendingAvatarFile ?: profile?.avatarUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(96.dp).clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                )
+            Box(contentAlignment = Alignment.BottomEnd, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Box(contentAlignment = Alignment.Center) {
+                    AsyncImage(
+                        model = pendingAvatarFile ?: profile?.avatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier.size(96.dp).clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .then(if (isSaving && pendingAvatarFile != null) Modifier.alpha(0.4f) else Modifier)
+                    )
+                    // Visible upload feedback: previously nothing indicated an avatar was
+                    // actually being uploaded — the screen just sat there until save() finished.
+                    if (isSaving && pendingAvatarFile != null) {
+                        CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 3.dp)
+                    }
+                }
+                IconButton(
+                    onClick = onPickAvatar,
+                    modifier = Modifier.size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        Icons.Filled.PhotoCamera,
+                        contentDescription = "Change photo",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = onPickAvatar, modifier = Modifier.align(Alignment.CenterHorizontally)) {

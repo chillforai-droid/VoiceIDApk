@@ -1,5 +1,8 @@
 package com.voiceid.app.ui.navigation
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -38,6 +41,7 @@ import com.voiceid.app.ui.search.SearchViewModel
 import com.voiceid.app.ui.settings.SettingsScreen
 import com.voiceid.app.ui.settings.SettingsViewModel
 import com.voiceid.app.call.CallState
+import java.io.File
 
 private val bottomNavItems = listOf(
     Triple(Routes.HOME, "Chats", Icons.Filled.ChatBubble),
@@ -275,11 +279,31 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
                 val profile by vm.profile.collectAsState()
                 val isSaving by vm.isSaving.collectAsState()
                 val error by vm.errorMessage.collectAsState()
+
+                // ROOT CAUSE FIX: "Change photo" previously had onPickAvatar = { } (a no-op) and
+                // save() always passed a hardcoded `null` avatarFile — so no picker was ever wired
+                // up and no picked photo could ever reach uploadAvatar(). This mirrors the same
+                // GetContent() image-picker pattern already used for chat images in ChatScreen.kt.
+                var pendingAvatarFile by remember { mutableStateOf<File?>(null) }
+                val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                    uri?.let {
+                        val file = File(context.cacheDir, "avatar_${System.currentTimeMillis()}.jpg")
+                        context.contentResolver.openInputStream(it)?.use { input ->
+                            file.outputStream().use { out -> input.copyTo(out) }
+                        }
+                        pendingAvatarFile = file
+                    }
+                }
+
                 EditProfileScreen(
                     profile = profile, isSaving = isSaving, errorMessage = error,
-                    onPickAvatar = { }, pendingAvatarFile = null,
+                    onPickAvatar = { avatarPicker.launch("image/*") },
+                    pendingAvatarFile = pendingAvatarFile,
                     onSave = { name, bio ->
-                        vm.save(name, bio, null, cloudName = "voiceid") { navController.popBackStack() }
+                        vm.save(name, bio, pendingAvatarFile, cloudName = com.voiceid.app.BuildConfig.CLOUDINARY_CLOUD_NAME) {
+                            pendingAvatarFile = null
+                            navController.popBackStack()
+                        }
                     },
                     onBack = { navController.popBackStack() }
                 )
@@ -292,7 +316,8 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
                 SettingsScreen(
                     themeMode = themeMode, privacySettings = privacy,
                     onThemeModeChange = vm::setThemeMode,
-                    onPrivacyChange = vm::updatePrivacySettings
+                    onPrivacyChange = vm::updatePrivacySettings,
+                    onSignOut = { authViewModel.signOut(); onSignedOut() }
                 )
             }
             composable(Routes.CHAT) { backStackEntry ->

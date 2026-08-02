@@ -164,12 +164,36 @@ class AuthRepository {
     /**
      * Post-auth onboarding check (API_REFERENCE.md §2 / BACKEND_README.md §2.3):
      * SELECT * FROM profiles WHERE id = auth.uid(); missing row or null username -> needs onboarding.
+     *
+     * ROOT CAUSE FIX (avatar not appearing for Google-signed-in users): the web client's
+     * AuthContext.tsx ("Sync Google avatar if missing") backfills `profiles.avatar_url` from
+     * the Supabase Auth user's own `user_metadata.avatar_url` — which Supabase populates from
+     * the Google account tied to that email during the OAuth exchange — the very first time a
+     * profile with no avatar is loaded. This Kotlin repository had no equivalent: it only ever
+     * read `profiles.avatar_url` as-is, so a Google user who never manually picked a photo
+     * simply never got one, even though the same account shows an avatar on the web. This
+     * mirrors that exact web behavior on Android.
      */
     suspend fun fetchOwnProfile(): Profile? {
         val userId = currentUserId() ?: return null
-        return client.from("profiles").select {
+        val profile = client.from("profiles").select {
             filter { eq("id", userId) }
-        }.decodeSingleOrNull<Profile>()
+        }.decodeSingleOrNull<Profile>() ?: return null
+
+        if (profile.avatarUrl.isNullOrBlank()) {
+            val googleAvatarUrl = client.auth.currentUserOrNull()
+                ?.userMetadata?.get("avatar_url")
+                ?.let { runCatching { it.toString().trim('"') }.getOrNull() }
+                ?.takeIf { it.isNotBlank() && it != "null" }
+
+            if (googleAvatarUrl != null) {
+                client.from("profiles").update({ set("avatar_url", googleAvatarUrl) }) {
+                    filter { eq("id", userId) }
+                }
+                return profile.copy(avatarUrl = googleAvatarUrl)
+            }
+        }
+        return profile
     }
 
     suspend fun isUsernameAvailable(username: String): Boolean {
