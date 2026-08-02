@@ -59,7 +59,7 @@ object SupabaseModule {
 
     /**
      * ROOT CAUSE FIX (2026-08-02): Web calls `await supabase.auth.getSession()` immediately
-     * before every /api/media/* request (see src/pages/ChatPage.tsx) — the JS SDK's
+     * before every /api/media call (see src/pages/ChatPage.tsx) — the JS SDK's
      * getSession() checks the cached session's expiry and transparently refreshes it first
      * if it's stale, so the token Web sends is always guaranteed-fresh at the moment of use.
      * Android's currentAccessTokenOrNull() is a plain cached read with no such check, which
