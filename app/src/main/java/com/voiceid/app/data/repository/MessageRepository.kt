@@ -61,7 +61,7 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
      */
     suspend fun sendVoice(conversationId: String, file: File, durationSeconds: Int, mimeType: String) {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
-        val token = SupabaseModule.currentAccessToken() ?: throw AuthException("No session token")
+        val token = SupabaseModule.freshAccessToken() ?: throw AuthException("No session token")
         require(durationSeconds in 1..120) { "Voice message duration must be 1-120 seconds" }
 
         val sha256 = sha256Hex(file)
@@ -87,7 +87,7 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
     /** Image message: same upload path, media_status set to 'delivered' immediately per §3.3/§7.2. */
     suspend fun sendImage(conversationId: String, file: File, mimeType: String) {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
-        val token = SupabaseModule.currentAccessToken() ?: throw AuthException("No session token")
+        val token = SupabaseModule.freshAccessToken() ?: throw AuthException("No session token")
 
         val sha256 = sha256Hex(file)
         val upload = mediaApi.uploadRaw(token, file, mimeType)
@@ -108,7 +108,7 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
 
     /** Recipient-side media fetch + best-effort ack, per §1.3/§1.4/§7.3. */
     suspend fun downloadMedia(messageId: String): ByteArray {
-        val token = SupabaseModule.currentAccessToken() ?: throw AuthException("No session token")
+        val token = SupabaseModule.freshAccessToken() ?: throw AuthException("No session token")
         val auth = mediaApi.requestDownloadAuth(token, messageId)
         val bytes = mediaApi.downloadBytes(auth.url)
         mediaApi.ackDelivery(token, messageId) // fire-and-forget, 403-for-sender is expected/non-fatal
@@ -117,7 +117,7 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
 
     /** Sender-initiated delete: DB row first, then B2 object — §3.4/§7.4. */
     suspend fun deleteMessage(message: Message) {
-        val token = SupabaseModule.currentAccessToken()
+        val token = SupabaseModule.freshAccessToken()
         val deleted = client.from("messages").delete {
             filter { eq("id", message.id) }
             select()

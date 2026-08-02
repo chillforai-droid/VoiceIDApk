@@ -2,6 +2,8 @@ package com.voiceid.app.data.remote
 
 import com.google.gson.annotations.SerializedName
 import com.voiceid.app.BuildConfig
+import android.util.Base64
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -151,9 +153,54 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             val bodyStr = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
                 val errorBody = runCatching { gson.fromJson(bodyStr, ApiErrorBody::class.java) }.getOrNull()
+                if (resp.code == 401) {
+                    logAuthDiagnostics(request)
+                }
                 throw MediaApiException(resp.code, errorBody)
             }
             return gson.fromJson(bodyStr, clazz)
         }
     }
+
+    /**
+     * DIAGNOSTIC ONLY (2026-08-02): server rejects media requests with 401 despite the same
+     * session working fine for text messages (Postgrest/RLS). To find the real cause without
+     * guessing, decode the JWT's own exp/iss/aud claims locally — no supabase-kt API calls
+     * involved, so this can't itself be wrong about a library method name. Filter logcat for
+     * "VoiceID/MediaAuth401" after reproducing the bug.
+     */
+    private fun logAuthDiagnostics(request: Request) {
+        val authHeader = request.header("Authorization") ?: run {
+            Log.e(TAG_401, "401 on ${request.url} — Authorization header was MISSING from the request entirely.")
+            return
+        }
+        val token = authHeader.removePrefix("Bearer ").trim()
+        if (token.isBlank()) {
+            Log.e(TAG_401, "401 on ${request.url} — Authorization header present but token string was blank.")
+            return
+        }
+        val parts = token.split(".")
+        if (parts.size != 3) {
+            Log.e(TAG_401, "401 on ${request.url} — token doesn't look like a JWT (expected 3 dot-separated parts, got ${parts.size}). First 20 chars: ${token.take(20)}")
+            return
+        }
+        try {
+            val payloadJson = String(Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP))
+            val claims = gson.fromJson(payloadJson, Map::class.java)
+            val exp = (claims["exp"] as? Double)?.toLong()
+            val nowSeconds = System.currentTimeMillis() / 1000
+            val expStatus = if (exp != null) {
+                if (exp < nowSeconds) "EXPIRED ${nowSeconds - exp}s ago" else "valid for ${exp - nowSeconds}s more"
+            } else "no exp claim found"
+            Log.e(
+                TAG_401,
+                "401 on ${request.url} — token claims: iss=${claims["iss"]} aud=${claims["aud"]} " +
+                    "role=${claims["role"]} sub=${claims["sub"]} exp=$exp ($expStatus, device clock now=$nowSeconds)"
+            )
+        } catch (e: Exception) {
+            Log.e(TAG_401, "401 on ${request.url} — failed to decode JWT payload for diagnostics", e)
+        }
+    }
 }
+
+private const val TAG_401 = "VoiceID/MediaAuth401"
