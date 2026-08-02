@@ -303,6 +303,7 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
                 LaunchedEffect(conversationId) { vm.open(conversationId) }
                 val messages by vm.messages.collectAsState()
                 val isSending by vm.isSending.collectAsState()
+                val errorMessage by vm.errorMessage.collectAsState()
 
                 ChatScreen(
                     otherUserName = otherUserName,
@@ -310,6 +311,8 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
                     messages = messages,
                     selfUserId = vm.selfUserId,
                     isSending = isSending,
+                    errorMessage = errorMessage,
+                    onClearError = { vm.clearError() },
                     onSendText = { vm.sendText(conversationId, it) },
                     onSendVoice = { file, duration -> vm.sendVoice(conversationId, file, duration) },
                     onSendImage = { file -> vm.sendImage(conversationId, file) },

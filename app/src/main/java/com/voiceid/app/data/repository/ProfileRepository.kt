@@ -6,6 +6,8 @@ import com.voiceid.app.BuildConfig
 import com.voiceid.app.data.model.Profile
 import com.voiceid.app.data.remote.SupabaseModule
 import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -44,7 +46,10 @@ class ProfileRepository {
         }
     }
 
-    fun uploadAvatar(file: File, cloudName: String): String {
+    // Same root-cause fix as MediaApi.kt: this was a blocking `fun` doing synchronous OkHttp
+    // calls with no withContext(Dispatchers.IO), so an avatar upload froze the UI thread for
+    // the whole request instead of running in the background.
+    suspend fun uploadAvatar(file: File, cloudName: String): String = withContext(Dispatchers.IO) {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
         val timestamp = System.currentTimeMillis() / 1000
         val folder = "voiceid/avatars"
@@ -82,6 +87,6 @@ class ProfileRepository {
             gson.fromJson(resp.body?.string(), CloudinaryUploadResponse::class.java)
         }
 
-        return uploadResponse.secureUrl
+        uploadResponse.secureUrl
     }
 }

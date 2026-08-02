@@ -43,6 +43,8 @@ fun ChatScreen(
     messages: List<Message>,
     selfUserId: String?,
     isSending: Boolean,
+    errorMessage: String?,
+    onClearError: () -> Unit,
     onSendText: (String) -> Unit,
     onSendVoice: (File, Int) -> Unit,
     onSendImage: (File) -> Unit,
@@ -57,8 +59,20 @@ fun ChatScreen(
     val recorder = remember { VoiceRecorderController(context) }
     val isRecording by recorder.isRecording.collectAsState()
     val elapsedSeconds by recorder.elapsedSeconds.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+
+    // Root-cause fix: errorMessage was already being set correctly in ChatViewModel on any
+    // send/download failure, but this screen never read it — so a genuine upload/download
+    // error (as opposed to the separate main-thread-block issue) was silently swallowed with
+    // no visible feedback at all. This surfaces it as a Snackbar and clears it once shown.
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            snackbarHostState.showSnackbar(errorMessage)
+            onClearError()
+        }
+    }
 
     LaunchedEffect(isRecording) {
         while (isRecording) {
@@ -80,6 +94,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {

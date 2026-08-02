@@ -2,6 +2,8 @@ package com.voiceid.app.data.remote
 
 import com.google.gson.annotations.SerializedName
 import com.voiceid.app.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,6 +32,18 @@ class MediaApiException(val code: Int, val body: ApiErrorBody?) :
  * Thin client for the frozen `/api/media` endpoints contract documented in API_REFERENCE.md §1.
  * This talks to the EXISTING VoiceID backend (Express/Vercel handlers) — it does not
  * reimplement any server logic. Base URL points at the deployed backend (BuildConfig.API_BASE_URL).
+ *
+ * ROOT CAUSE FIX (2026-08-01): every function here used to be a plain blocking `fun` doing a
+ * synchronous OkHttp `.execute()` call, invoked directly from suspend functions in
+ * MessageRepository/ProfileRepository with no withContext(Dispatchers.IO) at any call site.
+ * Since those repositories are called from viewModelScope (Dispatchers.Main.immediate), the
+ * blocking network I/O — including large voice/image file uploads — was running directly on
+ * the UI thread. That's the "spinner stuck, no error, app looks frozen" bug: the thread doing
+ * the network work was the SAME thread that draws the spinner, so nothing could visibly
+ * update until the call finished or hit OkHttp's timeout. Every function below is now
+ * `suspend` and internally hops to Dispatchers.IO, matching how Retrofit/Ktor normally handle
+ * this for you automatically — callers don't need to change anything, they already call these
+ * from suspend functions.
  */
 class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
 
@@ -44,7 +58,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     private fun authHeader(token: String) = "Bearer $token"
 
     /** POST /api/media/upload — raw binary body, matches API_REFERENCE.md §1.1 exactly. */
-    fun uploadRaw(token: String, file: File, mimeType: String): UploadResponse {
+    suspend fun uploadRaw(token: String, file: File, mimeType: String): UploadResponse = withContext(Dispatchers.IO) {
         val body = file.asRequestBody(mimeType.toMediaTypeOrNull())
         val request = Request.Builder()
             .url("$baseUrl/api/media/upload")
@@ -52,11 +66,11 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .header("Content-Type", mimeType)
             .post(body)
             .build()
-        return execute(request, UploadResponse::class.java)
+        execute(request, UploadResponse::class.java)
     }
 
     /** POST /api/media/upload-auth — presigned direct-to-B2 PUT URL, §1.2. Preferred for large files. */
-    fun requestUploadAuth(token: String, mimeType: String): UploadAuthResponse {
+    suspend fun requestUploadAuth(token: String, mimeType: String): UploadAuthResponse = withContext(Dispatchers.IO) {
         val json = gson.toJson(mapOf("mimeType" to mimeType))
         val request = Request.Builder()
             .url("$baseUrl/api/media/upload-auth")
@@ -64,11 +78,11 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .header("Content-Type", "application/json")
             .post(json.toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
-        return execute(request, UploadAuthResponse::class.java)
+        execute(request, UploadAuthResponse::class.java)
     }
 
     /** Direct PUT of raw bytes to the presigned B2 URL returned above. */
-    fun putToPresignedUrl(url: String, file: File, mimeType: String) {
+    suspend fun putToPresignedUrl(url: String, file: File, mimeType: String) = withContext(Dispatchers.IO) {
         val body = file.asRequestBody(mimeType.toMediaTypeOrNull())
         val request = Request.Builder()
             .url(url)
@@ -81,7 +95,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     }
 
     /** POST /api/media/download-auth — presigned GET URL, §1.3. */
-    fun requestDownloadAuth(token: String, messageId: String): DownloadAuthResponse {
+    suspend fun requestDownloadAuth(token: String, messageId: String): DownloadAuthResponse = withContext(Dispatchers.IO) {
         val json = gson.toJson(mapOf("messageId" to messageId))
         val request = Request.Builder()
             .url("$baseUrl/api/media/download-auth")
@@ -89,15 +103,15 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .header("Content-Type", "application/json")
             .post(json.toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
-        return execute(request, DownloadAuthResponse::class.java)
+        execute(request, DownloadAuthResponse::class.java)
     }
 
     /** Fetch the actual bytes from a presigned B2 URL. */
-    fun downloadBytes(url: String): ByteArray {
+    suspend fun downloadBytes(url: String): ByteArray = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).get().build()
         http.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) throw MediaApiException(resp.code, null)
-            return resp.body?.bytes() ?: ByteArray(0)
+            resp.body?.bytes() ?: ByteArray(0)
         }
     }
 
@@ -105,7 +119,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
      * POST /api/media/ack — §1.4. Fire-and-forget per API_REFERENCE.md: a 403 here means the
      * caller is the message's own sender, which is expected/non-fatal, not a bug to retry.
      */
-    fun ackDelivery(token: String, messageId: String) {
+    suspend fun ackDelivery(token: String, messageId: String) = withContext(Dispatchers.IO) {
         try {
             val json = gson.toJson(mapOf("messageId" to messageId))
             val request = Request.Builder()
@@ -121,7 +135,7 @@ class MediaApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     }
 
     /** DELETE /api/media/delete/:objectKey — §1.5, called after the messages row is already deleted. */
-    fun deleteObject(token: String, objectKey: String) {
+    suspend fun deleteObject(token: String, objectKey: String) = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("$baseUrl/api/media/delete/$objectKey")
             .header("Authorization", authHeader(token))

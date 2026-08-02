@@ -181,8 +181,9 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
             }
 
             override fun onAddStream(stream: MediaStream) {
-                _remoteStream.value = stream
-                _callState.value = CallState.ACTIVE
+                // No-op under UNIFIED_PLAN — this legacy Plan-B callback does not reliably
+                // fire once addTrack() (above) replaces addStream() on the sending side. See
+                // onAddTrack below, which is the callback that actually fires now.
             }
 
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
@@ -202,7 +203,13 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
             override fun onRemoveStream(p0: MediaStream) {}
             override fun onDataChannel(p0: org.webrtc.DataChannel) {}
             override fun onRenegotiationNeeded() {}
-            override fun onAddTrack(p0: org.webrtc.RtpReceiver, p1: Array<out MediaStream>) {}
+            override fun onAddTrack(receiver: org.webrtc.RtpReceiver, streams: Array<out MediaStream>) {
+                // The Unified-Plan-correct counterpart to the sending side's addTrack() above
+                // — this is what actually fires (onAddStream does not), so the remote-track
+                // state and ACTIVE transition both need to live here, not in onAddStream.
+                _remoteStream.value = streams.firstOrNull()
+                _callState.value = CallState.ACTIVE
+            }
         })!!
 
         val audioConstraints = MediaConstraints().apply {
@@ -213,9 +220,14 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
         val audioSource: AudioSource = factory.createAudioSource(audioConstraints)
         val audioTrack = factory.createAudioTrack("voiceid-audio", audioSource)
         localAudioTrack = audioTrack
+        // ROOT CAUSE FIX: sdpSemantics is UNIFIED_PLAN (line 169) but this used to call the
+        // legacy Plan-B `addStream()` API, which is unreliable/unsupported when mixed with
+        // Unified Plan in native WebRTC — the remote side's negotiation can silently fail to
+        // produce a working track, matching "call rings/connects on signaling but audio/ICE
+        // never actually completes". addTrack() is the Unified-Plan-correct API.
         val localStream = factory.createLocalMediaStream("voiceid-stream")
         localStream.addTrack(audioTrack)
-        pc.addStream(localStream)
+        pc.addTrack(audioTrack, listOf(localStream.id))
 
         peerConnection = pc
         return pc
