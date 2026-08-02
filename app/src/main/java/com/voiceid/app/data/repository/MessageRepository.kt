@@ -1,6 +1,9 @@
 package com.voiceid.app.data.repository
 
+import com.voiceid.app.data.model.ImageMessageInsert
 import com.voiceid.app.data.model.Message
+import com.voiceid.app.data.model.TextMessageInsert
+import com.voiceid.app.data.model.VoiceMessageInsert
 import com.voiceid.app.data.remote.MediaApi
 import com.voiceid.app.data.remote.SupabaseModule
 import io.github.jan.supabase.postgrest.from
@@ -46,11 +49,10 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
     suspend fun sendText(conversationId: String, body: String) {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
         client.from("messages").insert(
-            mapOf(
-                "conversation_id" to conversationId,
-                "sender_id" to userId,
-                "content_body" to body,
-                "content_type" to "text"
+            TextMessageInsert(
+                conversationId = conversationId,
+                senderId = userId,
+                contentBody = body
             )
         )
     }
@@ -69,17 +71,15 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
         val messageId = UUID.randomUUID().toString() // client-generated, per §3.3
 
         client.from("messages").insert(
-            mapOf(
-                "id" to messageId,
-                "conversation_id" to conversationId,
-                "sender_id" to userId,
-                "content_type" to "voice",
-                "b2_object_key" to upload.objectKey,
-                "sha256" to sha256,
-                "media_status" to "pending",
-                "duration" to durationSeconds,
-                "mime_type" to mimeType,
-                "byte_size" to file.length()
+            VoiceMessageInsert(
+                id = messageId,
+                conversationId = conversationId,
+                senderId = userId,
+                b2ObjectKey = upload.objectKey,
+                sha256 = sha256,
+                duration = durationSeconds,
+                mimeType = mimeType,
+                byteSize = file.length()
             )
         )
     }
@@ -93,15 +93,13 @@ class MessageRepository(private val mediaApi: MediaApi = MediaApi()) {
         val upload = mediaApi.uploadRaw(token, file, mimeType)
 
         client.from("messages").insert(
-            mapOf(
-                "conversation_id" to conversationId,
-                "sender_id" to userId,
-                "content_type" to "image",
-                "b2_object_key" to upload.objectKey,
-                "sha256" to sha256,
-                "media_status" to "delivered",
-                "mime_type" to mimeType,
-                "byte_size" to file.length()
+            ImageMessageInsert(
+                conversationId = conversationId,
+                senderId = userId,
+                b2ObjectKey = upload.objectKey,
+                sha256 = sha256,
+                mimeType = mimeType,
+                byteSize = file.length()
             )
         )
     }

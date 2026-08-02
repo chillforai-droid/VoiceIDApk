@@ -129,3 +129,45 @@ data class ConversationSummary(
     val isOnline: Boolean,
     val unreadCount: Int
 )
+
+/**
+ * BUG FIX (2026-08-02): MessageRepository previously built these three insert payloads with a
+ * plain `mapOf(...)` mixing String/Int/Long values, which Kotlin infers as `Map<String, Any>`.
+ * kotlinx.serialization (which Postgrest-kt uses to encode the insert body) has no serializer
+ * for `Any` — there's no way to know at compile time what's actually inside it — so every
+ * text/voice/image send crashed with "Serializer for class 'Any' is not found." These
+ * @Serializable data classes give every field a concrete, known type instead.
+ */
+@Serializable
+data class TextMessageInsert(
+    @SerialName("conversation_id") val conversationId: String,
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("content_body") val contentBody: String,
+    @SerialName("content_type") val contentType: String = "text"
+)
+
+@Serializable
+data class VoiceMessageInsert(
+    @SerialName("id") val id: String,
+    @SerialName("conversation_id") val conversationId: String,
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("content_type") val contentType: String = "voice",
+    @SerialName("b2_object_key") val b2ObjectKey: String,
+    @SerialName("sha256") val sha256: String,
+    @SerialName("media_status") val mediaStatus: String = "pending",
+    @SerialName("duration") val duration: Int,
+    @SerialName("mime_type") val mimeType: String,
+    @SerialName("byte_size") val byteSize: Long
+)
+
+@Serializable
+data class ImageMessageInsert(
+    @SerialName("conversation_id") val conversationId: String,
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("content_type") val contentType: String = "image",
+    @SerialName("b2_object_key") val b2ObjectKey: String,
+    @SerialName("sha256") val sha256: String,
+    @SerialName("media_status") val mediaStatus: String = "delivered",
+    @SerialName("mime_type") val mimeType: String,
+    @SerialName("byte_size") val byteSize: Long
+)
