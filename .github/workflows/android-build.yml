@@ -49,6 +49,15 @@ jobs:
           CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
           EOF
 
+      # Optional: push notifications for incoming calls (see call/VoiceIdFirebaseMessagingService.kt).
+      # Store the *contents* of your real google-services.json, base64-encoded, as the
+      # GOOGLE_SERVICES_JSON secret (e.g. `base64 -w0 google-services.json`). Until that
+      # secret is set this step is skipped and the build proceeds without Firebase, exactly
+      # as before this feature was added — see app/build.gradle.kts's conditional plugin apply.
+      - name: Write google-services.json (skipped if secret not set)
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' | base64 -d > app/google-services.json
+
       - name: Lint
         run: ./gradlew lintDebug --stacktrace
         continue-on-error: true

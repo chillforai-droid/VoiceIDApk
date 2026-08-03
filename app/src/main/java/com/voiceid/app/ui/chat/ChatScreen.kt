@@ -48,7 +48,7 @@ fun ChatScreen(
     onSendText: (String) -> Unit,
     onSendVoice: (File, Int) -> Unit,
     onSendImage: (File) -> Unit,
-    onMediaRequested: (Message, (File) -> Unit) -> Unit,
+    onMediaRequested: (Message, (File) -> Unit, (String) -> Unit) -> Unit,
     onDeleteMessage: (Message) -> Unit,
     onCallClick: () -> Unit,
     onBack: () -> Unit
@@ -199,7 +199,7 @@ fun ChatScreen(
 private fun MessageBubble(
     message: Message,
     isMine: Boolean,
-    onMediaRequested: (Message, (File) -> Unit) -> Unit,
+    onMediaRequested: (Message, (File) -> Unit, (String) -> Unit) -> Unit,
     onDelete: () -> Unit
 ) {
     var showDeleteMenu by remember { mutableStateOf(false) }
@@ -241,12 +241,13 @@ private fun MessageBubble(
 private fun VoiceMessageContent(
     message: Message,
     textColor: Color,
-    onMediaRequested: (Message, (File) -> Unit) -> Unit
+    onMediaRequested: (Message, (File) -> Unit, (String) -> Unit) -> Unit
 ) {
     val player = remember { VoiceMessagePlayer() }
     val isPlaying by player.isPlaying.collectAsState()
     val progress by player.progress.collectAsState()
     var localFile by remember { mutableStateOf<File?>(null) }
+    var failed by remember { mutableStateOf(false) }
 
     LaunchedEffect(isPlaying) {
         while (isPlaying) {
@@ -262,10 +263,15 @@ private fun VoiceMessageContent(
             } else if (localFile != null) {
                 player.play(localFile!!) {}
             } else {
-                onMediaRequested(message) { file -> localFile = file; player.play(file) {} }
+                failed = false
+                onMediaRequested(message, { file -> localFile = file; player.play(file) {} }, { failed = true })
             }
         }) {
-            Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = "Play voice message", tint = textColor)
+            Icon(
+                if (failed) Icons.Filled.ErrorOutline else if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = "Play voice message",
+                tint = textColor
+            )
         }
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.width(120.dp))
         Spacer(Modifier.width(8.dp))
@@ -274,10 +280,12 @@ private fun VoiceMessageContent(
 }
 
 @Composable
-private fun ImageMessageContent(message: Message, onMediaRequested: (Message, (File) -> Unit) -> Unit) {
+private fun ImageMessageContent(message: Message, onMediaRequested: (Message, (File) -> Unit, (String) -> Unit) -> Unit) {
     var localFile by remember { mutableStateOf<File?>(null) }
+    var failed by remember { mutableStateOf(false) }
     LaunchedEffect(message.id) {
-        onMediaRequested(message) { file -> localFile = file }
+        failed = false
+        onMediaRequested(message, { file -> localFile = file }, { failed = true })
     }
     if (localFile != null) {
         AsyncImage(
@@ -285,6 +293,14 @@ private fun ImageMessageContent(message: Message, onMediaRequested: (Message, (F
             contentDescription = "Image message",
             modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(12.dp))
         )
+    } else if (failed) {
+        Box(modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Filled.BrokenImage, contentDescription = null)
+                Spacer(Modifier.height(4.dp))
+                Text("Unavailable", style = MaterialTheme.typography.labelSmall)
+            }
+        }
     } else {
         Box(modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()

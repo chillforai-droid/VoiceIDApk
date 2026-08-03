@@ -17,6 +17,11 @@ class CallRepository {
 
     private val client = SupabaseModule.client()
 
+    suspend fun getById(callId: String): Call? =
+        client.from("calls").select {
+            filter { eq("id", callId) }
+        }.decodeSingleOrNull()
+
     suspend fun createRingingCall(receiverId: String): Call {
         val userId = SupabaseModule.currentUserId() ?: throw AuthException("Not authenticated")
         return client.from("calls").insert(

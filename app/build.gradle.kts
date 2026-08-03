@@ -8,6 +8,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+// Push notifications for incoming calls (see call/VoiceIdFirebaseMessagingService.kt):
+// applied only when a real google-services.json exists in this module, so a fresh
+// checkout without Firebase configured yet still builds fine — see local.properties.example
+// and .github/workflows/android-build.yml for how CI supplies this file from a secret.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.voiceid.app"
     compileSdk = 36
@@ -165,6 +173,7 @@ dependencies {
     // Kotlinx
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
 
     // Google Sign-In (native OAuth flow, per AI_HANDOFF §6.1)
@@ -194,6 +203,13 @@ dependencies {
 
     // Permissions helper
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+    // Push notifications: wakes the app for an incoming call even when backgrounded/killed —
+    // see call/VoiceIdFirebaseMessagingService.kt. Safe to include even before Firebase is
+    // configured; FirebaseApp simply fails to initialize at runtime until google-services.json
+    // is real, which VoiceIdApplication.kt guards against.
+    implementation(platform("com.google.firebase:firebase-bom:34.9.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

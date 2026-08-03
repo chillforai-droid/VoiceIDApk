@@ -10,4 +10,5 @@
 local.properties
 *.keystore
 *.jks
+app/google-services.json
 !gradle/wrapper/gradle-wrapper.jar

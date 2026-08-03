@@ -8,6 +8,7 @@ import com.voiceid.app.data.repository.MessageRepository
 import com.voiceid.app.data.repository.NotificationRepository
 import com.voiceid.app.data.repository.PresenceRepository
 import com.voiceid.app.data.repository.ProfileRepository
+import com.voiceid.app.data.repository.PushTokenRepository
 
 /**
  * Deliberately simple manual dependency graph (no Hilt/Dagger) — this app has a small,
@@ -24,4 +25,5 @@ object AppContainer {
     val callRepository: CallRepository by lazy { CallRepository() }
     val notificationRepository: NotificationRepository by lazy { NotificationRepository() }
     val presenceRepository: PresenceRepository by lazy { PresenceRepository() }
+    val pushTokenRepository: PushTokenRepository by lazy { PushTokenRepository() }
 }

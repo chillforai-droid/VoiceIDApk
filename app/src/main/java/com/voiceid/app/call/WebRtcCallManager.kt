@@ -1,6 +1,10 @@
 package com.voiceid.app.call
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import com.voiceid.app.data.model.Call
 import com.voiceid.app.data.remote.SupabaseModule
 import com.voiceid.app.data.repository.CallRepository
@@ -74,6 +78,9 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
     var activeCall: Call? = null
         private set
 
+    private var callActionReceiver: BroadcastReceiver? = null
+    private var incomingTimeoutJob: kotlinx.coroutines.Job? = null
+
     private val iceServers = listOf(
         PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
     )
@@ -113,6 +120,7 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
 
     /** Receiver flow: on incoming call row, accept -> subscribe -> broadcast receiver-ready, step 3. */
     fun acceptIncomingCall(call: Call) {
+        stopIncomingCallAlert()
         activeCall = call
         _callState.value = CallState.CONNECTING
         scope.launch {
@@ -123,15 +131,72 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
     }
 
     fun rejectIncomingCall(call: Call) {
+        stopIncomingCallAlert()
         scope.launch {
             callRepository.markRejected(call.id)
             cleanup()
         }
     }
 
-    fun setIncomingCall(call: Call) {
+    /**
+     * ROOT CAUSE FIX ("call shows in notification but there's no way to answer, other phone
+     * never rings"): this previously only flipped CallState to INCOMING_RINGING with no
+     * audible/visible alert of any kind outside of whatever Composable happened to be on
+     * screen. Now it also: (1) plays the device's default ringtone + vibration pattern, (2)
+     * posts a real heads-up notification with working Accept/Reject actions and a
+     * full-screen intent, and (3) listens for those actions via a receiver registered for
+     * the lifetime of this specific incoming call.
+     */
+    fun setIncomingCall(call: Call, callerName: String) {
         activeCall = call
         _callState.value = CallState.INCOMING_RINGING
+        startIncomingCallAlert(call, callerName)
+    }
+
+    private fun startIncomingCallAlert(call: Call, callerName: String) {
+        stopIncomingCallAlert() // defensive: clear any stale alert first
+
+        CallRinger.start(context)
+        IncomingCallNotificationHelper.show(context, call.id, callerName)
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val incoming = activeCall ?: return
+                if (intent.getStringExtra("callId") != incoming.id) return
+                when (intent.action) {
+                    CallActionReceiver.BROADCAST_ACCEPT -> acceptIncomingCall(incoming)
+                    CallActionReceiver.BROADCAST_REJECT -> rejectIncomingCall(incoming)
+                }
+            }
+        }
+        callActionReceiver = receiver
+        val filter = IntentFilter().apply {
+            addAction(CallActionReceiver.BROADCAST_ACCEPT)
+            addAction(CallActionReceiver.BROADCAST_REJECT)
+        }
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+
+        // Local safety-net timeout mirroring the caller's own 30s no-answer window (see
+        // startOutgoingCall), so a receiver whose screen stays on this call doesn't keep
+        // ringing/vibrating forever if the caller's own timeout update never reaches us
+        // (incomingCallFlow only listens for Insert events today, not the caller's later
+        // Update to status=missed).
+        incomingTimeoutJob = scope.launch {
+            delay(35_000)
+            if (_callState.value == CallState.INCOMING_RINGING) {
+                stopIncomingCallAlert()
+                cleanup()
+            }
+        }
+    }
+
+    private fun stopIncomingCallAlert() {
+        incomingTimeoutJob?.cancel()
+        incomingTimeoutJob = null
+        CallRinger.stop(context)
+        IncomingCallNotificationHelper.cancel(context)
+        callActionReceiver?.let { runCatching { context.unregisterReceiver(it) } }
+        callActionReceiver = null
     }
 
     private suspend fun subscribeSignaling(callId: String) {
@@ -319,6 +384,7 @@ class WebRtcCallManager(private val context: Context, private val scope: Corouti
     }
 
     private fun cleanup() {
+        stopIncomingCallAlert()
         _callState.value = CallState.ENDED
         peerConnection?.close()
         peerConnection = null

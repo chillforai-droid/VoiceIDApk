@@ -116,15 +116,31 @@ class ChatViewModel(context: Context) : ViewModel() {
     }
 
     /** Recipient-side download-and-cache, mirroring mediaDownload.ts::fetchAndCacheMedia (§7.3). */
-    fun mediaFileFor(message: Message, onReady: (File) -> Unit) {
+    fun mediaFileFor(message: Message, onReady: (File) -> Unit, onError: (String) -> Unit = {}) {
         mediaCache.get(message.id)?.let { onReady(it); return }
         viewModelScope.launch {
             try {
                 val bytes = messageRepository.downloadMedia(message.id)
                 val file = mediaCache.put(message.id, bytes)
                 onReady(file)
+            } catch (e: com.voiceid.app.data.remote.MediaApiException) {
+                // A 404 here means the object itself is gone from storage — by design this
+                // backend deletes each media file from B2 the moment ANY recipient device
+                // successfully downloads it once (api/ack.ts). If that already happened on
+                // another device/install, or this device's own local copy was lost, there is
+                // no way to recover the file — so say that plainly instead of an opaque
+                // "Media API error (404)".
+                val message2 = if (e.code == 404) {
+                    "This media is no longer available — it may have already been viewed and removed."
+                } else {
+                    "Could not load media: ${e.message ?: e.javaClass.simpleName}"
+                }
+                _errorMessage.value = message2
+                onError(message2)
             } catch (e: Exception) {
-                _errorMessage.value = "Could not load media: ${e.message ?: e.javaClass.simpleName}"
+                val message2 = "Could not load media: ${e.message ?: e.javaClass.simpleName}"
+                _errorMessage.value = message2
+                onError(message2)
             }
         }
     }

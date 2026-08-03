@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -282,6 +283,7 @@ class AuthViewModel : ViewModel() {
                 authRepository.claimUsername(username, displayName)
                 _ownProfile.value = authRepository.fetchOwnProfile()
                 authRepository.currentUserId()?.let { NotificationsCenter.start(it) }
+                registerPushToken()
                 _uiState.value = AuthUiState.Ready
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(e.message ?: "Could not claim username")
@@ -319,6 +321,7 @@ class AuthViewModel : ViewModel() {
             AuthUiState.AwaitingOnboarding
         } else {
             authRepository.currentUserId()?.let { NotificationsCenter.start(it) }
+            registerPushToken()
             AuthUiState.Ready
         }
     }
@@ -348,6 +351,24 @@ class AuthViewModel : ViewModel() {
             NotificationsCenter.stop()
             _ownProfile.value = null
             _uiState.value = AuthUiState.Idle
+        }
+    }
+
+    /**
+     * Registers this device's FCM token so incoming calls can wake the app via push (see
+     * VoiceIdFirebaseMessagingService, PushTokenRepository). Called at the same points as
+     * NotificationsCenter.start() — once a real session is confirmed Ready. Wrapped in a
+     * try/catch since FirebaseMessaging.getInstance() throws until google-services.json is a
+     * real Firebase config; that must never block sign-in.
+     */
+    private fun registerPushToken() {
+        viewModelScope.launch {
+            try {
+                val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                AppContainer.pushTokenRepository.register(token)
+            } catch (e: Exception) {
+                Log.w(TAG, "registerPushToken: skipped (Firebase not configured / token unavailable)", e)
+            }
         }
     }
 }

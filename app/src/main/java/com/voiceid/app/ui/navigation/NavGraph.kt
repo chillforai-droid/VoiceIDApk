@@ -131,6 +131,16 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
 
     LaunchedEffect(Unit) { callViewModel.startListeningForIncomingCalls() }
 
+    // Picks up an Answer/Decline tapped on the incoming-call notification — see
+    // PendingCallActionHolder for why this hand-off from MainActivity exists.
+    val pendingCallAction by com.voiceid.app.call.PendingCallActionHolder.current.collectAsState()
+    LaunchedEffect(pendingCallAction) {
+        pendingCallAction?.let {
+            callViewModel.handlePendingCallAction(it.action, it.callId)
+            com.voiceid.app.call.PendingCallActionHolder.consume()
+        }
+    }
+
     // Global incoming-call overlay takes priority over whatever screen is showing —
     // mirrors the web app's app-wide IncomingCallModal.
     if (incomingCall != null) {
@@ -341,7 +351,7 @@ fun MainNavGraph(authViewModel: AuthViewModel, onSignedOut: () -> Unit) {
                     onSendText = { vm.sendText(conversationId, it) },
                     onSendVoice = { file, duration -> vm.sendVoice(conversationId, file, duration) },
                     onSendImage = { file -> vm.sendImage(conversationId, file) },
-                    onMediaRequested = { message, onReady -> vm.mediaFileFor(message, onReady) },
+                    onMediaRequested = { message, onReady, onError -> vm.mediaFileFor(message, onReady, onError) },
                     onDeleteMessage = { vm.deleteMessage(it) },
                     onCallClick = { callViewModel.startOutgoingCall(otherUserId) },
                     onBack = { navController.popBackStack() }

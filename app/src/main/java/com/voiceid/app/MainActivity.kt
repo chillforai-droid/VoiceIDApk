@@ -9,6 +9,8 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.voiceid.app.call.PendingCallAction
+import com.voiceid.app.call.PendingCallActionHolder
 import com.voiceid.app.ui.auth.AuthUiState
 import com.voiceid.app.ui.auth.AuthViewModel
 import com.voiceid.app.ui.navigation.AuthNavGraph
@@ -31,6 +33,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         authViewModel.handleAuthDeeplink(intent)
+        handlePendingCallIntent(intent)
 
         setContent {
             val themePreferences = remember { ThemePreferences(applicationContext) }
@@ -48,6 +51,22 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         authViewModel.handleAuthDeeplink(intent)
+        handlePendingCallIntent(intent)
+    }
+
+    // Set by CallActionReceiver when the user taps "Answer" on the incoming-call
+    // notification — see PendingCallActionHolder for why this hand-off exists.
+    private fun handlePendingCallIntent(intent: Intent) {
+        val action = intent.getStringExtra(EXTRA_PENDING_CALL_ACTION) ?: return
+        val callId = intent.getStringExtra(EXTRA_PENDING_CALL_ID) ?: return
+        PendingCallActionHolder.set(PendingCallAction(action, callId))
+    }
+
+    companion object {
+        const val EXTRA_PENDING_CALL_ACTION = "pending_call_action"
+        const val EXTRA_PENDING_CALL_ID = "pending_call_id"
+        const val CALL_ACTION_ACCEPT = PendingCallAction.ACCEPT
+        const val CALL_ACTION_REJECT = PendingCallAction.REJECT
     }
 }
 
