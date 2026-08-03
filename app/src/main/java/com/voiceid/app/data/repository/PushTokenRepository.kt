@@ -24,9 +24,10 @@ class PushTokenRepository {
     suspend fun register(token: String) {
         val userId = SupabaseModule.currentUserId() ?: return
         client.from("push_tokens").upsert(
-            PushTokenUpsert(user_id = userId, token = token),
+            PushTokenUpsert(user_id = userId, token = token)
+        ) {
             onConflict = "user_id"
-        )
+        }
     }
 
     suspend fun clearForCurrentUser() {
