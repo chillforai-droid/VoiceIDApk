@@ -208,8 +208,10 @@ dependencies {
     // see call/VoiceIdFirebaseMessagingService.kt. Safe to include even before Firebase is
     // configured; FirebaseApp simply fails to initialize at runtime until google-services.json
     // is real, which VoiceIdApplication.kt guards against.
+    // NOTE: firebase-messaging-ktx (not this) was removed from the BoM in July 2025 — the
+    // Kotlin extensions now live in the base firebase-messaging artifact itself.
     implementation(platform("com.google.firebase:firebase-bom:34.9.0"))
-    implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-messaging")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
