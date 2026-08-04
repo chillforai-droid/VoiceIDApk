@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "104607436012",
+    "project_id": "voiceid-2d259",
+    "storage_bucket": "voiceid-2d259.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:104607436012:android:e7d8223f0d51009e88e9c9",
+        "android_client_info": {
+          "package_name": "com.voiceid.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcGGi54ONKxWcFN_ceYz3rQ8fijjp2MTs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:104607436012:android:b4b2e6d51563640388e9c9",
+        "android_client_info": {
+          "package_name": "com.voiceid.app.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcGGi54ONKxWcFN_ceYz3rQ8fijjp2MTs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

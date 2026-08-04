@@ -243,6 +243,7 @@ private fun VoiceMessageContent(
     textColor: Color,
     onMediaRequested: (Message, (File) -> Unit, (String) -> Unit) -> Unit
 ) {
+    val context = LocalContext.current
     val player = remember { VoiceMessagePlayer() }
     val isPlaying by player.isPlaying.collectAsState()
     val progress by player.progress.collectAsState()
@@ -261,10 +262,18 @@ private fun VoiceMessageContent(
             if (isPlaying) {
                 player.stop()
             } else if (localFile != null) {
-                player.play(localFile!!) {}
+                player.play(localFile!!, onComplete = {}, onError = {
+                    com.voiceid.app.media.MediaCache(context).remove(message.id)
+                    localFile = null
+                    failed = true
+                })
             } else {
                 failed = false
-                onMediaRequested(message, { file -> localFile = file; player.play(file) {} }, { failed = true })
+                onMediaRequested(message, { file -> localFile = file; player.play(file, onComplete = {}, onError = {
+                    com.voiceid.app.media.MediaCache(context).remove(message.id)
+                    localFile = null
+                    failed = true
+                }) }, { failed = true })
             }
         }) {
             Icon(
@@ -280,7 +289,11 @@ private fun VoiceMessageContent(
 }
 
 @Composable
-private fun ImageMessageContent(message: Message, onMediaRequested: (Message, (File) -> Unit, (String) -> Unit) -> Unit) {
+private fun ImageMessageContent(
+    message: Message,
+    onMediaRequested: (Message, (File) -> Unit, (String) -> Unit) -> Unit
+) {
+    val context = LocalContext.current
     var localFile by remember { mutableStateOf<File?>(null) }
     var failed by remember { mutableStateOf(false) }
     LaunchedEffect(message.id) {
@@ -288,10 +301,26 @@ private fun ImageMessageContent(message: Message, onMediaRequested: (Message, (F
         onMediaRequested(message, { file -> localFile = file }, { failed = true })
     }
     if (localFile != null) {
+        // ROOT CAUSE FIX (2026-08-04, "small empty bubble, no image, no error" reported for
+        // images sent from the web client): AsyncImage previously had no error handling at
+        // all, so a downloaded-but-corrupt/empty file (see api/upload.ts fix — a missing
+        // Content-Type on the web sender's request could previously produce a 0-byte object
+        // in B2 with no visible error to the sender) decoded to nothing and the bubble just
+        // collapsed to its minimum padding with zero visible content. onState now catches
+        // that decode failure explicitly, shows the same "Unavailable" fallback used for a
+        // network failure, AND deletes the bad local cache file — otherwise MediaCache.get()
+        // would keep returning this same corrupt file forever (it only checks existence, not
+        // validity), permanently hiding even a correctly-fixed future resend under this
+        // messageId.
         AsyncImage(
             model = localFile,
             contentDescription = "Image message",
-            modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(12.dp))
+            modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(12.dp)),
+            onError = {
+                com.voiceid.app.media.MediaCache(context).remove(message.id)
+                localFile = null
+                failed = true
+            }
         )
     } else if (failed) {
         Box(modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center) {

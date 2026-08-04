@@ -109,19 +109,43 @@ class VoiceMessagePlayer {
     private val _progress = MutableStateFlow(0f)
     val progress: StateFlow<Float> = _progress.asStateFlow()
 
-    fun play(file: File, onComplete: () -> Unit) {
+    /**
+     * ROOT CAUSE FIX (2026-08-04): setDataSource()/prepare() throw IOException/
+     * IllegalStateException on a corrupt or empty file (see api/upload.ts fix — a missing
+     * Content-Type on the web sender's request could previously produce a 0-byte object in
+     * B2). Neither was ever caught here, and this is invoked directly from a Compose onClick
+     * with no surrounding try/catch, so tapping play on such a message crashed the app
+     * outright instead of showing any kind of "can't play this" state. onError lets the
+     * caller show a visible failure and, critically, invalidate the bad local cache entry —
+     * MediaCache.get() only checks file existence, not validity, so a corrupt file would
+     * otherwise keep being served as if it were fine forever.
+     */
+    fun play(file: File, onComplete: () -> Unit, onError: () -> Unit = {}) {
         stop()
-        val mp = MediaPlayer()
-        mp.setDataSource(file.absolutePath)
-        mp.setOnCompletionListener {
+        try {
+            val mp = MediaPlayer()
+            mp.setDataSource(file.absolutePath)
+            mp.setOnCompletionListener {
+                _isPlaying.value = false
+                _progress.value = 0f
+                onComplete()
+            }
+            mp.setOnErrorListener { _, _, _ ->
+                _isPlaying.value = false
+                _progress.value = 0f
+                stop()
+                onError()
+                true
+            }
+            mp.prepare()
+            mp.start()
+            player = mp
+            _isPlaying.value = true
+        } catch (e: Exception) {
             _isPlaying.value = false
             _progress.value = 0f
-            onComplete()
+            onError()
         }
-        mp.prepare()
-        mp.start()
-        player = mp
-        _isPlaying.value = true
     }
 
     fun updateProgress() {

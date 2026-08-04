@@ -14,8 +14,8 @@ private data class PushTokenUpsert(
 /**
  * Registers this device's FCM token against the signed-in user, so the backend's
  * /api/send-call-push (triggered by a Supabase DB webhook on `calls` INSERT) knows where to
- * deliver the incoming-call push. Mirrors the `push_tokens` table added by the
- * "create push tokens" Supabase migration — one row per user (last-registered device wins,
+ * deliver the incoming-call push. Mirrors `push_tokens` table added in
+ * supabase/migrations/*_push_tokens.sql — one row per user (last-registered device wins,
  * matching the common single-active-device assumption of this app's call flow).
  */
 class PushTokenRepository {
@@ -24,10 +24,9 @@ class PushTokenRepository {
     suspend fun register(token: String) {
         val userId = SupabaseModule.currentUserId() ?: return
         client.from("push_tokens").upsert(
-            PushTokenUpsert(user_id = userId, token = token)
-        ) {
+            PushTokenUpsert(user_id = userId, token = token),
             onConflict = "user_id"
-        }
+        )
     }
 
     suspend fun clearForCurrentUser() {
