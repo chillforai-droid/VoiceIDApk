@@ -11,6 +11,11 @@ jobs:
   build:
     name: Build Debug & Release APKs
     runs-on: ubuntu-latest
+    env:
+      # FIX (2026-08-04): GitHub Actions does not allow the `secrets` context inside an
+      # `if:` conditional directly ("Unrecognized named-value: 'secrets'" build failure).
+      # Secrets must be assigned to env first, then checked via the `env` context in `if:`.
+      GOOGLE_SERVICES_JSON_SECRET: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
     steps:
       - name: Checkout repository
@@ -55,8 +60,8 @@ jobs:
       # secret is set this step is skipped and the build proceeds without Firebase, exactly
       # as before this feature was added — see app/build.gradle.kts's conditional plugin apply.
       - name: Write google-services.json (skipped if secret not set)
-        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
-        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' | base64 -d > app/google-services.json
+        if: ${{ env.GOOGLE_SERVICES_JSON_SECRET != '' }}
+        run: echo "$GOOGLE_SERVICES_JSON_SECRET" | base64 -d > app/google-services.json
 
       - name: Lint
         run: ./gradlew lintDebug --stacktrace
