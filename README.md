@@ -1,73 +1,68 @@
-# VoiceID — Android
+# VoiceID Mobile (React Native / Expo) — Phase 1
 
-Native Android client for VoiceID, built against the **same** Supabase project, Backblaze B2
-media API, and Cloudinary avatar pipeline as the existing web app. No backend logic is
-duplicated or replaced — this app is a second client of the frozen contracts documented in
-`PROJECT_OVERVIEW.md`, `BACKEND_README.md`, and `API_REFERENCE.md` from the web repo.
+यह आपके VoiceID वेब ऐप का React Native (Android) संस्करण है — **Phase 1 फाउंडेशन**। असली Supabase बैकएंड से जुड़ा हुआ, native UI, WhatsApp-स्टाइल डार्क थीम।
 
-## Stack
-Kotlin · Jetpack Compose · Material 3 · MVVM · Navigation Compose · Supabase Kotlin SDK
-(`supabase-kt`) · native WebRTC (`stream-webrtc-android`) · CameraX · MediaRecorder · Coil ·
-Coroutines/Flow · WorkManager-ready · DataStore.
+## अभी क्या काम करता है ✅
+- Login / SignUp / Forgot Password — असली Supabase Auth से जुड़ा हुआ
+- Session अपने-आप याद रहती है (AsyncStorage)
+- Bottom tab navigation: Home, Chats, Settings
+- Chats टैब में profiles की लिस्ट (placeholder — असली conversations लॉजिक Phase 3 में)
+- Settings में profile दिखना + Logout
+- GitHub Actions से push करते ही APK अपने-आप बनना
 
-## One-time setup
+## अभी क्या बाकी है (अगले फेज़ में जुड़ेगा)
+- असली चैट स्क्रीन (टेक्स्ट, इमेज, वॉइस मैसेज) — Phase 3
+- वॉइस/वीडियो कॉल्स (react-native-webrtc) — Phase 4
+- Push notifications (Firebase) — Phase 5
+- Notifications, Search, Call History, Edit Profile स्क्रीन — Phase 5
 
-1. Copy `local.properties.example` to `local.properties` and fill in:
-   - `sdk.dir` — path to your Android SDK
-   - `SUPABASE_URL` / `SUPABASE_ANON_KEY` — the **same** values as the web app's
-     `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`
-   - `API_BASE_URL` — the deployed backend origin that serves `/api/media/*` and
-     `/api/cloudinary-sign` (e.g. `https://voiceid.online`)
-   - `GOOGLE_WEB_CLIENT_ID` — the **Web application** OAuth client ID from the same Google
-     Cloud project configured in Supabase Auth's Google provider. Native Google Sign-In on
-     Android uses Credential Manager / One Tap, which requires a Web client ID (not an
-     Android client ID) as the `serverClientId` so the returned ID token is verifiable by
-     Supabase.
-2. In Google Cloud Console, add your app's SHA-1 (debug + release) to the Android OAuth
-   client tied to the same project, and add package name `com.voiceid.app`
-   (`com.voiceid.app.debug` for debug builds).
-3. Open in Android Studio (Koala+) or build from the CLI: `./gradlew assembleDebug`.
+---
 
-## CI
+## GitHub पर push करके APK कैसे बनाएं
 
-`.github/workflows/android-build.yml` builds Debug and Release APKs on every push/PR and
-uploads them as workflow artifacts. Add the four config values above as **repository
-secrets** (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `API_BASE_URL`, `GOOGLE_WEB_CLIENT_ID`) so CI
-builds are wired to your real project — without them the app still compiles (placeholder
-values), but Supabase calls will fail at runtime, same as running the web app with an empty
-`.env`.
+### Step 1 — नया GitHub repo बनाएं
+GitHub पर एक नया (private या public) repository बनाएं, जैसे `voiceid-mobile`।
 
-Release APKs are signed with the debug key when no release keystore is configured via
-`RELEASE_STORE_FILE`/`RELEASE_STORE_PASSWORD`/`RELEASE_KEY_ALIAS`/`RELEASE_KEY_PASSWORD` in
-`local.properties` (or equivalent CI secrets) — replace with real signing before a Play Store
-upload.
+### Step 2 — इस कोड को push करें
+```bash
+cd VoiceID-mobile
+git init
+git add .
+git commit -m "Phase 1: auth + navigation foundation"
+git branch -M main
+git remote add origin https://github.com/<आपका-username>/voiceid-mobile.git
+git push -u origin main
+```
 
-## What's implemented
+### Step 3 — Supabase Secrets जोड़ें (ज़रूरी!)
+आपके repo में जाएं → **Settings → Secrets and variables → Actions → New repository secret**, और ये दो secrets जोड़ें:
 
-Every feature listed in the brief has a real implementation wired to the documented backend
-contracts: Google/email auth + forgot password + username onboarding gate, Home (realtime
-conversation list with presence), Search, Contacts + friend requests, private chat with
-realtime text/voice/image messages (MediaRecorder + CameraX/gallery + the exact
-`/api/media/*` upload/download/ack/delete flow), native WebRTC voice calls over the
-`voice-call:{callId}` broadcast signaling protocol, call history, notifications, profile +
-avatar editing (Cloudinary), and settings (light/dark/system theme + privacy/notification
-preferences backed by `user_settings`).
+| Secret नाम | वैल्यू कहाँ से मिलेगी |
+|---|---|
+| `SUPABASE_URL` | आपके web app के `.env` में `VITE_SUPABASE_URL` |
+| `SUPABASE_ANON_KEY` | आपके web app के `.env` में `VITE_SUPABASE_ANON_KEY` |
 
-## Known gaps carried over from the web app (see `AI_HANDOFF.md`)
+⚠️ **ध्यान दें**: सिर्फ़ `ANON_KEY` डालें, कभी भी `SERVICE_ROLE_KEY` नहीं (वो सिर्फ़ सर्वर के लिए है)।
 
-- **No TURN server**: calls use STUN only, same limitation as the web client — calls between
-  peers on restrictive/symmetric NATs may fail to connect. Adding a TURN server (e.g. via
-  Twilio, or `coturn` self-hosted) is an additive change to `WebRtcCallManager`'s ICE server
-  list, not a redesign.
-- **No push notifications (FCM)**: in-app Realtime notifications work identically to the web
-  app, but there is no background push when the app is fully killed — this mirrors the web
-  app's lack of a push channel and would be a genuinely new capability, not a port.
+### Step 4 — Build अपने-आप शुरू हो जाएगी
+Push करते ही **Actions** टैब में एक workflow run दिखेगा ("Build Android APK")। लगभग 8-12 मिनट में पूरी हो जाएगी।
 
-## Verification status
+### Step 5 — APK डाउनलोड करें
+Workflow रन पूरा होने पर, उस रन के पेज पर नीचे **Artifacts** सेक्शन में `voiceid-debug-apk` दिखेगा — उसे डाउनलोड करके फ़ोन में इंस्टॉल करें (Settings में "Unknown apps install" allow करना पड़ सकता है, क्योंकि यह अभी Play Store से नहीं है)।
 
-This project was built by reading the four handoff docs and implementing every contract
-exactly as specified, but it has **not been compiled or run** in this environment — there is
-no Android SDK, emulator, or live Supabase project available here. Treat the first CI run (or
-first local `./gradlew assembleDebug`) as the real compile check, and expect to fix a small
-number of Supabase-Kotlin-SDK API surface mismatches (the library's exact method names for
-realtime broadcast/presence flows can shift between minor versions) on that first pass.
+---
+
+## लोकल पर टेस्ट करना (वैकल्पिक)
+```bash
+npm install
+cp .env.example .env   # फिर .env में असली SUPABASE_URL / SUPABASE_ANON_KEY भरें
+npx expo start
+```
+फ़ोन में **Expo Go** ऐप डाउनलोड करके QR कोड स्कैन करें।
+
+---
+
+## यह Phase 1 क्यों है, पूरा ऐप क्यों नहीं
+पूरे migration plan (`VoiceID-React-Native-Migration-Plan.md`) के मुताबिक, चैट, वॉइस मैसेज और कॉल्स जैसी भारी फ़ीचर्स को ठीक से (WhatsApp जैसी स्मूथनेस के साथ) बनाने में असली समय लगता है। यह Phase 1 आपको तुरंत एक चलता-फिरता, बैकएंड से जुड़ा APK देता है ताकि:
+1. आप पूरा setup (GitHub + build pipeline) अभी टेस्ट कर सकें
+2. हम बाकी स्क्रीन इसी नींव पर एक-एक करके जोड़ सकें, बिना दोबारा शुरू से बनाए
