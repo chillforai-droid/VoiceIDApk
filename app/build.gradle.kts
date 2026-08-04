@@ -208,7 +208,13 @@ dependencies {
     // see call/VoiceIdFirebaseMessagingService.kt. Safe to include even before Firebase is
     // configured; FirebaseApp simply fails to initialize at runtime until google-services.json
     // is real, which VoiceIdApplication.kt guards against.
-    implementation(platform("com.google.firebase:firebase-bom:34.9.0"))
+    // ROOT CAUSE FIX (2026-08-04): 34.9.0 could not be resolved on Maven ("Could not find
+    // com.google.firebase:firebase-messaging-ktx:." — an empty version means the BOM's own
+    // POM never resolved, so it supplied no version constraint at all, failing dependency
+    // resolution for EVERY module before compilation even started). 33.7.0 is a known-good,
+    // definitely-published BOM version. Bump this later once verified against
+    // https://firebase.google.com/support/release-notes/android if a newer one is needed.
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
 
     testImplementation("junit:junit:4.13.2")
